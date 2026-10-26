@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { load, type Store } from '@tauri-apps/plugin-store';
 import type { Fact, LogEntry, Profile, Settings } from './types';
+import I18N from './i18n';
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -37,7 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   vision: { enabled: false, intervalSec: 45, maxWidth: 1024, react: true, minReactGapSec: 120 },
   hotkey: 'CommandOrControl+Shift+W',
   activeProfileId: '',
-  ui: { showHud: true, balloonSec: 9, userName: '', mode: 'capri' },
+  ui: { showHud: true, balloonSec: 9, userName: '', mode: 'capri', lang: '' },
   capri: { frameWidth: 380, sleepSec: 90, typeCps: 32, glitch: true },
   music: {
     provider: 'auto',
@@ -252,6 +253,10 @@ export async function loadPersisted(): Promise<void> {
   try {
     disk = await load('cyberai.json', { autoSave: false, defaults: {} });
     const settings = mergeSettings(await disk.get<Settings>('settings'));
+    if (!settings.ui.lang) {
+      settings.ui = { ...settings.ui, lang: I18N.detect() };
+      if (settings.ui.lang === 'en' && settings.stt.language === 'it') settings.stt = { ...settings.stt, language: 'en' };
+    }
     let profiles = (await disk.get<Profile[]>('profiles')) ?? [];
     const facts = (await disk.get<Fact[]>('facts')) ?? [];
     if (!profiles.length) profiles = [newProfile()];

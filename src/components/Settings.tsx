@@ -22,6 +22,17 @@ import { speak, webVoices } from '../lib/tts';
 import { isVideo } from '../lib/useSprite';
 import { SPRITE_STATES, type Profile, type ProviderId, type Settings as S } from '../lib/types';
 import { Btn, Chip, Field, H, Select, Toggle } from './ui';
+import I18N, { T } from '../lib/i18n';
+
+/** Cambia lingua: salva, adegua STT/voce e ricarica (il DOM tradotto non torna indietro da solo). */
+function switchLang(l: 'it' | 'en') {
+  const st = useApp.getState();
+  if (st.settings.ui.lang === l) return;
+  const stt = /^(it|en)$/.test(st.settings.stt.language) ? { ...st.settings.stt, language: l } : st.settings.stt;
+  useApp.setState({ settings: { ...st.settings, ui: { ...st.settings.ui, lang: l }, stt } });
+  I18N.set(l);
+  window.setTimeout(() => location.reload(), 1200);
+}
 
 const TABS = [
   ['capri', 'Modalità'],
@@ -92,6 +103,29 @@ function ModeTab() {
   const redirect = `http://127.0.0.1:${s.spotify.port}/callback`;
   return (
     <div className="flex flex-col gap-5">
+      <section className="flex flex-col gap-3" data-noi18n>
+        <H n="L">Lingua · Language</H>
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              ['it', 'Italiano'],
+              ['en', 'English'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={s.ui.lang === id}
+              onClick={() => switchLang(id)}
+              className={`cursor-pointer border p-3 text-left font-display text-[14px] font-bold tracking-[2px] uppercase italic ${s.ui.lang === id ? 'border-yellow bg-yellow/10 text-yellow' : 'border-edge bg-panel text-muted'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="text-[13px] text-dim">{s.ui.lang === 'en' ? 'Interface, replies and speech recognition switch to English. The app reloads.' : "Interfaccia, risposte e riconoscimento vocale passano all'italiano. L'app si ricarica."}</div>
+      </section>
+
       <section className="flex flex-col gap-3">
         <H n="00">Interfaccia</H>
         <div className="grid grid-cols-2 gap-2">
@@ -556,7 +590,7 @@ function VoiceTab() {
           <Field label="Tono voce Windows (pitch)" type="number" value={v.webPitch} onChange={(x) => setV({ webPitch: Number(x) || 1 })} />
         </div>
         <Field label="ElevenLabs voice id" value={v.elevenVoiceId} onChange={(x) => setV({ elevenVoiceId: x })} />
-        <Btn variant="cyan" onClick={() => void speak(`[mood:happy] Ciao, sono ${prof.name}. Sistemi neurali online, choom.`, prof)}>
+        <Btn variant="cyan" onClick={() => void speak(`[mood:happy] ${T('Ciao, sono')} ${prof.name}. ${T('Sistemi neurali online, choom.')}`, prof)}>
           ▶ Test voce
         </Btn>
       </section>

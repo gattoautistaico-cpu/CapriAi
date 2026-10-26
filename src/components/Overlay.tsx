@@ -128,10 +128,7 @@ export function Hud() {
   const vramHigh = status.vramGb !== null && status.vramGb > cap;
   return (
     <div ref={ref} className="absolute top-4 right-4 flex h-10 items-stretch font-mono text-[12px]">
-      <div className="cut-slab glitch flex items-center bg-yellow pr-6 pl-4 font-display text-[16px] font-black tracking-[3px] text-void italic">
-        CYBER AI
-      </div>
-      <div className="glass -ml-2 flex items-center gap-4 border-t-2 border-yellow pr-4 pl-6" style={{ clipPath: 'polygon(16px 0, 100% 0, 100% 100%, 0 100%)' }}>
+      <div className="glass flex items-center gap-4 border-t-2 border-yellow pr-4 pl-6" style={{ clipPath: 'polygon(16px 0, 100% 0, 100% 100%, 0 100%)' }}>
         <span className={tone}>
           ● {status.provider.toUpperCase()} {status.model}
         </span>

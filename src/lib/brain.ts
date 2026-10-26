@@ -9,6 +9,7 @@ import { musicControl as control, musicNowPlaying as nowPlaying, musicPlay as pl
 import { SCREEN_RE, findContact, google, openApp, phoneCall, readScreen, webSearch, whatsappChat, youtube } from './actions';
 import { speak } from './tts';
 import type { ChatMsg } from './types';
+import { T } from './i18n';
 
 const history: ChatMsg[] = [];
 const MAX_HISTORY = 14;
@@ -144,7 +145,7 @@ async function runActions(acts: Action[]) {
           log('ok', 'azioni', `WhatsApp a ${c.name}`);
         } else {
           const wa = a.kind === 'wacall';
-          confirmCall(`${wa ? 'WhatsApp a' : 'Chiamo'} ${c.name} · ${c.phone}`, () => {
+          confirmCall(`${wa ? T('WhatsApp a') : T('Chiamo')} ${c.name} · ${c.phone}`, () => {
             const p = wa ? whatsappChat(c.phone) : phoneCall(c.phone);
             p.then(() => log('ok', 'azioni', `${wa ? 'WhatsApp' : 'chiamata'} ${c.name}`)).catch((e) => log('error', 'azioni', String(e)));
           });
@@ -178,7 +179,7 @@ async function deliver(raw: string, meta: string) {
     if (!useApp.getState().exchange.np) st.setExchange({ np: r.acts.map((a) => `${a.kind}: ${a.to ? a.to + ' · ' : ''}${a.v}`).join(' · ') });
     void runActions(r.acts);
   }
-  const text = r.text || (r.play ? `Metto su ${r.play}.` : r.acts.length ? 'Fatto, choom.' : '…');
+  const text = r.text || (r.play ? `${T('Metto su')} ${r.play}.` : r.acts.length ? T('Fatto, choom.') : '…');
   remember({ role: 'assistant', content: text });
   st.pushChat({ role: 'assistant', text, ts: Date.now(), meta });
   st.showBalloon(text, r.mood);
@@ -263,7 +264,7 @@ export function ask(userText: string, opts: { voice?: boolean; image?: string; s
       const msg = String(e instanceof Error ? e.message : e);
       log('error', 'brain', msg);
       useApp.getState().setStatus({ thinking: false });
-      const line = OFFLINE_LINES[Math.floor(Math.random() * OFFLINE_LINES.length)];
+      const line = T(OFFLINE_LINES[Math.floor(Math.random() * OFFLINE_LINES.length)]);
       useApp.getState().setTransientMood('sad');
       useApp.getState().showBalloon(line, 'sad');
       const prof = activeProfile();

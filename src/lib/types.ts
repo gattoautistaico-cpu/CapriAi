@@ -115,7 +115,7 @@ export interface Settings {
   };
   hotkey: string;
   activeProfileId: string;
-  ui: { showHud: boolean; balloonSec: number; userName: string; mode: 'classic' | 'capri' };
+  ui: { showHud: boolean; balloonSec: number; userName: string; mode: 'classic' | 'capri'; lang: '' | 'it' | 'en' };
   capri: { frameWidth: number; sleepSec: number; typeCps: number; glitch: boolean };
   music: {
     provider: 'auto' | 'swiftfree' | 'spotify';

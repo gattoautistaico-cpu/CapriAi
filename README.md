@@ -184,3 +184,18 @@ Build automatica: fai push su GitHub e il workflow `.github/workflows/build-wind
 - I font Orbitron, Rajdhani e Share Tech Mono arrivano da Google Fonts. Offline si usano Bahnschrift e Consolas.
 - Hotkey push-to-talk predefinita: `Ctrl+Shift+W`, modificabile nella scheda Ascolto.
 - Dal tray, "Blocca/Sblocca interazione" rende tutta la finestra cliccabile. Serve se il click-through dà problemi.
+
+## Lingua / Language
+
+L'interfaccia è in italiano e in inglese. Al primo avvio la lingua segue quella di Windows. Per cambiarla vai in **Impostazioni → Modalità → Lingua · Language**:
+- cambiano anche la lingua delle risposte dell'AI e quella del riconoscimento vocale (whisper);
+- l'app si ricarica.
+
+Per una voce inglese con Piper scegli `en_US-amy` nella scheda **Voce**.
+
+The UI is available in Italian and English. Switch it in **Settings → Mode → Lingua · Language**. AI replies and speech recognition follow the selected language.
+
+## Licenza
+
+Apache License 2.0: vedi [LICENSE](LICENSE) e [NOTICE](NOTICE). © 2026 gattoautistaico-cpu.
+I nomi "Cyber AI" e "Capri AI" non sono concessi in licenza (Apache-2.0, sezione 6).

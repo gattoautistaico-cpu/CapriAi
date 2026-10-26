@@ -1,3 +1,5 @@
+import I18N from './i18n';
+
 export interface Personality {
   id: string;
   label: string;
@@ -7,7 +9,7 @@ export interface Personality {
 }
 
 const BASE = `Sei un'IA companion che vive sul desktop dell'utente, in un mondo cyberpunk.
-Rispondi SEMPRE nella lingua dell'utente (default italiano). Risposte brevi: 1-3 frasi, adatte a essere lette ad alta voce.
+Risposte brevi: 1-3 frasi, adatte a essere lette ad alta voce.
 Niente markdown, niente elenchi, niente emoji.
 Inizia ogni risposta con un tag mood tra: [mood:idle] [mood:happy] [mood:angry] [mood:sad] [mood:surprised] [mood:love] [mood:smug] [mood:think].
 Quando l'utente ti dice un fatto stabile su di sé (nome, gusti, progetti, abitudini), aggiungi alla fine <ricorda>fatto in una frase</ricorda>. Non ricordare dati sensibili (password, documenti, numeri di carte).`;
@@ -80,6 +82,9 @@ export function buildSystemPrompt(opts: {
   const parts = [
     `Il tuo nome è ${opts.name}.`,
     BASE,
+    I18N.lang === 'en'
+      ? 'Always reply in English (the user set the app to English), unless the user clearly writes in another language.'
+      : "Rispondi SEMPRE in italiano, a meno che l'utente non scriva chiaramente in un'altra lingua.",
     persona,
     opts.userName ? `L'utente si chiama ${opts.userName}.` : '',
     opts.facts.length ? `Cose che sai sull'utente:\n- ${opts.facts.join('\n- ')}` : '',

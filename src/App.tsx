@@ -15,6 +15,7 @@ import { ollamaVram } from './lib/router';
 import { log, useApp } from './lib/store';
 import { ensureWhisper, mic, transcribe } from './lib/stt';
 import { autodetectTools } from './lib/tools';
+import { T } from './lib/i18n';
 
 /** In modalità passiva: dopo la parola di attivazione la frase successiva è il comando. */
 let awaitingCommandUntil = 0;
@@ -61,12 +62,12 @@ async function onUtterance(wav: Uint8Array) {
       return;
     }
     awaitingCommandUntil = Date.now() + 12000;
-    greet(passive.greeting || 'Dimmi, choom. Di cosa hai bisogno?');
+    greet(passive.greeting || T('Dimmi, choom. Di cosa hai bisogno?'));
     return;
   }
   awaitingCommandUntil = 0;
   if (text) await ask(text, { voice: true });
-  else if (!passive.on) useApp.getState().showBalloon('Non ho capito, choom. Riprova.', 'idle');
+  else if (!passive.on) useApp.getState().showBalloon(T('Non ho capito, choom. Riprova.'), 'idle');
 }
 
 async function openMic(): Promise<boolean> {

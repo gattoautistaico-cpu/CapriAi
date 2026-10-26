@@ -648,6 +648,44 @@ fn toggle_window(app: &AppHandle) {
     }
 }
 
+
+// ---------------------------------------------------------------- lingua menu tray
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetUserDefaultUILanguage() -> u16;
+}
+
+/// true se la lingua dell'interfaccia di Windows è l'italiano (LANG_ITALIAN = 0x10).
+fn os_is_italian() -> bool {
+    #[cfg(windows)]
+    unsafe {
+        return (GetUserDefaultUILanguage() & 0x3ff) == 0x10;
+    }
+    #[allow(unreachable_code)]
+    true
+}
+
+fn tray_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>, it: bool) -> tauri::Result<Menu<R>> {
+    let l = |a: &'static str, b: &'static str| if it { a } else { b };
+    let toggle = MenuItem::with_id(app, "toggle", l("Mostra / Nascondi", "Show / Hide"), true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", l("Impostazioni", "Settings"), true, None::<&str>)?;
+    let interact = MenuItem::with_id(app, "interact", l("Blocca/Sblocca interazione", "Lock/Unlock interaction"), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", l("Esci", "Quit"), true, None::<&str>)?;
+    Menu::with_items(app, &[&toggle, &settings, &interact, &quit])
+}
+
+/// Aggiorna le voci del menu tray quando l'utente cambia lingua.
+#[tauri::command]
+fn set_tray_lang(app: tauri::AppHandle, lang: String) -> Result<(), String> {
+    let menu = tray_menu(&app, !lang.starts_with("en")).map_err(|e| e.to_string())?;
+    if let Some(t) = app.tray_by_id("main") {
+        t.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn run() {
     let shared: AppState = Arc::new(Shared::default());
     let setup_state = shared.clone();
@@ -665,17 +703,7 @@ pub fn run() {
                 spawn_hit_test(win, setup_state.clone());
             }
 
-            let toggle = MenuItem::with_id(app, "toggle", "Mostra / Nascondi", true, None::<&str>)?;
-            let settings = MenuItem::with_id(app, "settings", "Impostazioni", true, None::<&str>)?;
-            let interact = MenuItem::with_id(
-                app,
-                "interact",
-                "Blocca/Sblocca interazione",
-                true,
-                None::<&str>,
-            )?;
-            let quit = MenuItem::with_id(app, "quit", "Esci", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&toggle, &settings, &interact, &quit])?;
+            let menu = tray_menu(app.handle(), os_is_italian())?;
 
             let mut tray = TrayIconBuilder::with_id("main")
                 .tooltip("Cyber AI")
@@ -706,6 +734,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            set_tray_lang,
             set_hit_rects,
             set_interactive,
             capture_screen,
