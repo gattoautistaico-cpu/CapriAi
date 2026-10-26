@@ -4,7 +4,16 @@ import { useApp } from './store';
 import { getVoiceLevel } from './tts';
 import type { Profile } from './types';
 
-export const fileSrc = (p: string) => convertFileSrc(p);
+/** GIF predefinite (Happy e Talking) usate quando l'outfit non ha frame per quello stato. */
+export const DEFAULT_SPRITES: Record<string, string[]> = { happy: ['/default/happy.gif'], talk: ['/default/talk.gif'] };
+export const fileSrc = (p: string) => (p.startsWith('/default/') ? p : convertFileSrc(p));
+export const isAnimated = (p: string) => /\.(webm|mp4|mov|gif)$/i.test(p);
+
+export function withDefaults(states: Record<string, string[]>): Record<string, string[]> {
+  const out = { ...states };
+  for (const [k, v] of Object.entries(DEFAULT_SPRITES)) if (!(out[k]?.length)) out[k] = v;
+  return out;
+}
 export const isVideo = (p: string) => /\.(webm|mp4|mov)$/i.test(p);
 
 /**
@@ -16,7 +25,7 @@ export function useSpriteFrame(profile: Profile | undefined, forceState?: string
   const status = useApp((s) => s.status);
   const transientMood = useApp((s) => s.transientMood);
   const outfit = profile?.outfits.find((o) => o.id === profile.activeOutfitId) ?? profile?.outfits[0];
-  const states = outfit?.states ?? {};
+  const states = withDefaults(outfit?.states ?? {});
   const has = (k: string) => (states[k]?.length ?? 0) > 0;
   const anyFrames = Object.values(states).some((a) => a.length > 0);
 
@@ -34,6 +43,7 @@ export function useSpriteFrame(profile: Profile | undefined, forceState?: string
     if (transientMood && has(transientMood)) return transientMood;
     if (profile && has(profile.mood)) return profile.mood;
     if (has('idle')) return 'idle';
+    if (has('happy')) return 'happy';
     return Object.keys(states).find((k) => has(k) && k !== 'dormant') ?? 'idle';
   }, [transientMood, profile?.mood, outfit]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -91,7 +101,7 @@ export function useSpriteFrame(profile: Profile | undefined, forceState?: string
   if (state === 'talk') {
     const talk = states.talk;
     // un video "talk" va in loop così com'è; con frame statici si fa lip sync
-    if (talk.length === 1 && isVideo(talk[0])) frame = talk[0];
+    if (talk.length === 1 && isAnimated(talk[0])) frame = talk[0];
     else frame = talk.length === 1 ? (mouth ? talk[0] : restFrames[0] ?? talk[0]) : talk[mouth];
   } else if (blinking && has('blink') && state === restState) {
     frame = states.blink[Math.min(states.blink.length - 1, tick % states.blink.length)];

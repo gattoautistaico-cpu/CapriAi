@@ -134,6 +134,49 @@ export function cleanForSpeech(t: string): string {
     .trim();
 }
 
+/** Voce Piper predefinita per lingua (installate da install.bat nella cartella voices). */
+const PIPER_LANG: Record<string, string> = { it: 'it_IT-paola-medium.onnx', en: 'en_US-amy-medium.onnx', pl: 'pl_PL-gosia-medium.onnx' };
+const modelCache = new Map<string, string>();
+
+/** Se il modello scelto è di un'altra lingua, usa la voce della lingua corrente nella stessa cartella (se esiste). */
+async function piperModelFor(model: string, lang: string): Promise<string> {
+  if (!model) return model;
+  const base = model.split(/[\\/]/).pop() ?? '';
+  if (base.toLowerCase().startsWith(lang + '_') || !PIPER_LANG[lang]) return model;
+  const key = model + '|' + lang;
+  if (modelCache.has(key)) return modelCache.get(key)!;
+  const alt = model.slice(0, model.length - base.length) + PIPER_LANG[lang];
+  let out = model;
+  try {
+    if (await invoke<boolean>('path_exists', { path: alt })) out = alt;
+    else {
+      // una voce italiana che legge il polacco suona male: meglio la voce di Windows della lingua giusta
+      out = '';
+      log('warn', 'tts', `voce Piper per "${lang}" non trovata (${PIPER_LANG[lang]}): uso la voce di Windows. Scaricala da Impostazioni → Voce.`);
+    }
+  } catch {
+    /* niente */
+  }
+  modelCache.set(key, out);
+  return out;
+}
+
+/** Scarica la voce Piper della lingua nella cartella della voce predefinita. */
+export async function downloadPiperVoice(lang: string): Promise<string> {
+  const s = useApp.getState().settings;
+  const name = PIPER_LANG[lang];
+  if (!name) throw new Error('lingua senza voce Piper: ' + lang);
+  const dir = s.tts.piperModel ? s.tts.piperModel.slice(0, s.tts.piperModel.length - (s.tts.piperModel.split(/[\\/]/).pop() ?? '').length) : '';
+  if (!dir) throw new Error('imposta prima la voce Piper predefinita');
+  const stem = name.replace(/\.onnx$/, '');
+  const [loc, spk, q] = stem.split('-');
+  const url = `https://huggingface.co/rhasspy/piper-voices/resolve/main/${loc.slice(0, 2)}/${loc}/${spk}/${q}/${stem}`;
+  await invoke('download_file', { url: url + '.onnx.json', dest: dir + name + '.json' });
+  await invoke('download_file', { url: url + '.onnx', dest: dir + name });
+  modelCache.clear();
+  return dir + name;
+}
+
 export async function speak(raw: string, profile: Profile): Promise<void> {
   const s = useApp.getState().settings;
   const engine = profile.voice.engine === 'default' ? s.tts.engine : profile.voice.engine;
@@ -144,7 +187,7 @@ export async function speak(raw: string, profile: Profile): Promise<void> {
   useApp.getState().setStatus({ speaking: true });
   try {
     if (engine === 'piper') {
-      const model = profile.voice.piperModel || s.tts.piperModel;
+      const model = await piperModelFor(profile.voice.piperModel || s.tts.piperModel, lang);
       if (!s.tts.piperExe || !model) throw new Error('Piper non configurato');
       const b64 = await invoke<string>('piper_tts', {
         exe: s.tts.piperExe,

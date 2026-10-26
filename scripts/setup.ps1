@@ -158,7 +158,8 @@ if (Ask 'Installare Piper + voci femminili?') {
   $pv = 'https://huggingface.co/rhasspy/piper-voices/resolve/main'
   $voicesList = @(
     @{ n = 'it_IT-paola-medium'; p = 'it/it_IT/paola/medium' },
-    @{ n = 'en_US-amy-medium';   p = 'en/en_US/amy/medium' }
+    @{ n = 'en_US-amy-medium';   p = 'en/en_US/amy/medium' },
+    @{ n = 'pl_PL-gosia-medium'; p = 'pl/pl_PL/gosia/medium' }
   )
   foreach ($v in $voicesList) {
     Download "$pv/$($v.p)/$($v.n).onnx" (Join-Path $Voices "$($v.n).onnx")

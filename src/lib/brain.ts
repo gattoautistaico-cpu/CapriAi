@@ -10,6 +10,8 @@ import { SCREEN_RE, findContact, google, openApp, phoneCall, readScreen, webSear
 import { speak } from './tts';
 import type { ChatMsg } from './types';
 import { T } from './i18n';
+import { clipThat } from './clip';
+import { moodToy, parseToyTags, runToyCmds, toyPrompt, type ToyCmd } from './lovense';
 
 const history: ChatMsg[] = [];
 const MAX_HISTORY = 14;
@@ -37,6 +39,7 @@ function toolsPrompt(): string {
   if (t.web) l.push("<web>ricerca</web> se ti serve un'informazione aggiornata o che non sai: ricevi i risultati e poi rispondi tu.");
   if (t.screen) l.push("<screen/> se l'utente chiede di qualcosa che ha sullo schermo e non ne hai già il contenuto.");
   if (t.calls) l.push('<call>nome o numero</call> chiama dal cellulare collegato. <wacall>nome</wacall> apre la chiamata WhatsApp. <wamsg to="nome">testo</wamsg> prepara un messaggio WhatsApp.');
+  if (useApp.getState().settings.clip.enabled) l.push("<clip/> salva un clip degli ultimi secondi di gioco (Medal, AMD o NVIDIA) quando l'utente dice \"clippa\", \"clip that\" o simili.");
   l.push("Annuncia l'azione in carattere, in una frase.");
   return l.join('\n');
 }
@@ -54,7 +57,7 @@ function systemPrompt(): string {
     userName: st.settings.ui.userName,
     facts: st.facts.slice(-40).map((f) => f.text),
     screen: st.status.lastScreen || undefined,
-  }) + music + (toolsPrompt() ? `\n\n${toolsPrompt()}` : '');
+  }) + music + (toolsPrompt() ? `\n\n${toolsPrompt()}` : '') + (toyPrompt() ? `\n\n${toyPrompt()}` : '');
 }
 
 function remember(m: ChatMsg) {
@@ -81,6 +84,8 @@ export interface Parsed {
   acts: Action[];
   web: string;
   screen: boolean;
+  toys: ToyCmd[];
+  clip: boolean;
 }
 
 /** Estrae mood, memorie, musica e azioni dal testo grezzo del modello. */
@@ -91,6 +96,8 @@ export function parseReply(raw: string): Parsed {
   let playQ = '';
   let web = '';
   let screen = false;
+  let clip = false;
+  const toys: ToyCmd[] = [];
   // alcuni modelli (qwen3, deepseek) emettono il ragionamento in <think>
   let text = String(raw ?? '').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<\/?think>/gi, '');
   text = text.replace(/<ricorda>([\s\S]*?)<\/ricorda>/gi, (_, f: string) => (facts.push(f.trim()), ''));
@@ -102,10 +109,12 @@ export function parseReply(raw: string): Parsed {
   text = text.replace(/<wamsg(?:\s+to\s*=\s*"([^"]*)")?\s*>([\s\S]*?)<\/wamsg>/gi, (_, to: string, v: string) => (acts.push({ kind: 'wamsg', to: (to ?? '').trim(), v: v.trim() }), ''));
   text = text.replace(/<web>([\s\S]*?)<\/web>/gi, (_, q: string) => ((web = q.trim()), ''));
   text = text.replace(/<screen\s*\/?>(?:<\/screen>)?/gi, () => ((screen = true), ''));
+  text = text.replace(/<clip\s*\/?>(?:<\/clip>)?/gi, () => ((clip = true), ''));
+  text = parseToyTags(text, toys);
   let mood = 'idle';
   text = text.replace(/\[mood:\s*([a-z]+)\s*\]/gi, (_, m: string) => ((mood = m.toLowerCase()), ''));
   text = text.replace(/[*_`#]+/g, '').replace(/\s+/g, ' ').trim();
-  return { text, mood, facts, play: playQ, cmds, acts, web, screen };
+  return { text, mood, facts, play: playQ, cmds, acts, web, screen, toys, clip };
 }
 
 const OFFLINE_LINES = [
@@ -179,7 +188,10 @@ async function deliver(raw: string, meta: string) {
     if (!useApp.getState().exchange.np) st.setExchange({ np: r.acts.map((a) => `${a.kind}: ${a.to ? a.to + ' · ' : ''}${a.v}`).join(' · ') });
     void runActions(r.acts);
   }
-  const text = r.text || (r.play ? `${T('Metto su')} ${r.play}.` : r.acts.length ? T('Fatto, choom.') : '…');
+  if (r.clip) void clipThat().catch((e) => log('error', 'clip', String(e instanceof Error ? e.message : e)));
+  if (r.toys.length) void runToyCmds(r.toys);
+  else void moodToy(r.mood);
+  const text = r.text || (r.play ? `${T('Metto su')} ${r.play}.` : r.acts.length || r.clip || r.toys.length ? T('Fatto, choom.') : '…');
   remember({ role: 'assistant', content: text });
   st.pushChat({ role: 'assistant', text, ts: Date.now(), meta });
   st.showBalloon(text, r.mood);

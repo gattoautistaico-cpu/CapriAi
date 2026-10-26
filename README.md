@@ -185,9 +185,36 @@ Build automatica: fai push su GitHub e il workflow `.github/workflows/build-wind
 - Hotkey push-to-talk predefinita: `Ctrl+Shift+W`, modificabile nella scheda Ascolto.
 - Dal tray, "Blocca/Sblocca interazione" rende tutta la finestra cliccabile. Serve se il click-through dà problemi.
 
-## Lingua / Language
+## Novità 0.5.0
 
-L'interfaccia è in italiano e in inglese. Al primo avvio la lingua segue quella di Windows. Per cambiarla vai in **Impostazioni → Modalità → Lingua · Language**:
+- **Riquadro in alto a destra rimosso**: la barra di stato non c'è più.
+- **GIF predefinite** *Happy* e *Talking*. Si usano finché non importi sprite per quegli stati.
+- **Clip con la voce** ("Capri clip that", "Capri clippa", frasi personalizzabili). Capri preme il tasto "salva clip" del programma attivo:
+
+  | Programma | Tasto predefinito | Cosa attivare nel programma |
+  |---|---|---|
+  | Medal | `F8` | clip in background |
+  | AMD Adrenalin | `Ctrl+Shift+S` | Instant Replay |
+  | NVIDIA (ShadowPlay / NVIDIA App) | `Alt+F10` | Instant Replay |
+  | Xbox Game Bar (ripiego) | `Win+Alt+G` | — |
+
+  - In modalità automatica il programma viene riconosciuto dai processi attivi.
+  - L'opzione "Ascolta i comandi di clip" tiene il microfono aperto solo per queste frasi (whisper locale).
+  - Anche l'AI può fare un clip, con il tag `<clip/>`.
+  - Si configura in **Impostazioni → Clip**.
+- **Lovense**: si collega tramite la Lovense Remote in *Game Mode*, la stessa API locale usata dai plugin "for Remote" per game engine. Si configura in **Impostazioni → Lovense**.
+  - Ricerca dei giocattoli, scelta del giocattolo, limite d'intensità, pulsante STOP.
+  - Preset Lovense (pulse, wave, fireworks, earthquake).
+  - Editor di pattern: barre trascinabili 0-20, fino a 50 passi, funzioni (vibrate, rotate, pump, thrust…), intervallo, durata.
+  - Collegamento mood → pattern.
+  - Controllo da parte dell'AI con i tag `<toy pattern="Onda" sec="20"/>`, `<toy v="12" sec="5"/>` e `<toy stop/>`.
+- **Polacco**:
+  - interfaccia, risposte e riconoscimento vocale (`pl`);
+  - voce Piper `pl_PL-gosia`, scaricabile da **Impostazioni → Voce**, con la voce Windows polacca come ripiego.
+
+## Lingua / Language / Język
+
+L'interfaccia è in italiano, inglese e polacco. Al primo avvio la lingua segue quella di Windows. Per cambiarla vai in **Impostazioni → Modalità → Lingua · Language · Język**:
 - cambiano anche la lingua delle risposte dell'AI e quella del riconoscimento vocale (whisper);
 - l'app si ricarica.
 

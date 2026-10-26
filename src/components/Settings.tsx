@@ -18,17 +18,18 @@ import { log, newProfile, uid, useApp } from '../lib/store';
 import { ensureWhisper } from '../lib/stt';
 import { swiftPlay, swiftStatus } from '../lib/swiftfree';
 import { connectSpotify, disconnectSpotify, play as spotifyPlay, spotifyConnected } from '../lib/spotify';
-import { speak, webVoices } from '../lib/tts';
+import { downloadPiperVoice, speak, webVoices } from '../lib/tts';
+import { ClipTab, LovenseTab } from './Extras';
 import { isVideo } from '../lib/useSprite';
 import { SPRITE_STATES, type Profile, type ProviderId, type Settings as S } from '../lib/types';
 import { Btn, Chip, Field, H, Select, Toggle } from './ui';
 import I18N, { T } from '../lib/i18n';
 
 /** Cambia lingua: salva, adegua STT/voce e ricarica (il DOM tradotto non torna indietro da solo). */
-function switchLang(l: 'it' | 'en') {
+function switchLang(l: 'it' | 'en' | 'pl') {
   const st = useApp.getState();
   if (st.settings.ui.lang === l) return;
-  const stt = /^(it|en)$/.test(st.settings.stt.language) ? { ...st.settings.stt, language: l } : st.settings.stt;
+  const stt = /^(it|en|pl)$/.test(st.settings.stt.language) ? { ...st.settings.stt, language: l } : st.settings.stt;
   useApp.setState({ settings: { ...st.settings, ui: { ...st.settings.ui, lang: l }, stt } });
   I18N.set(l);
   window.setTimeout(() => location.reload(), 1200);
@@ -46,6 +47,8 @@ const TABS = [
   ['free', 'API free'],
   ['strumenti', 'Strumenti'],
   ['passivo', 'Hey Capri'],
+  ['clip', 'Clip'],
+  ['lovense', 'Lovense'],
   ['memoria', 'Memoria'],
   ['log', 'Log'],
 ] as const;
@@ -104,12 +107,13 @@ function ModeTab() {
   return (
     <div className="flex flex-col gap-5">
       <section className="flex flex-col gap-3" data-noi18n>
-        <H n="L">Lingua · Language</H>
-        <div className="grid grid-cols-2 gap-2">
+        <H n="L">Lingua · Language · Język</H>
+        <div className="grid grid-cols-3 gap-2">
           {(
             [
               ['it', 'Italiano'],
               ['en', 'English'],
+              ['pl', 'Polski'],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -123,7 +127,13 @@ function ModeTab() {
             </button>
           ))}
         </div>
-        <div className="text-[13px] text-dim">{s.ui.lang === 'en' ? 'Interface, replies and speech recognition switch to English. The app reloads.' : "Interfaccia, risposte e riconoscimento vocale passano all'italiano. L'app si ricarica."}</div>
+        <div className="text-[13px] text-dim">{
+            {
+              it: "Interfaccia, risposte, riconoscimento vocale e voce passano all'italiano. L'app si ricarica.",
+              en: 'Interface, replies, speech recognition and voice switch to English. The app reloads.',
+              pl: 'Interfejs, odpowiedzi, rozpoznawanie mowy i głos przełączają się na polski. Aplikacja się przeładuje.',
+            }[s.ui.lang || 'it']
+          }</div>
       </section>
 
       <section className="flex flex-col gap-3">
@@ -521,7 +531,6 @@ function PersonaTab() {
         value={s.ui.balloonSec}
         onChange={(v) => patch('ui', { balloonSec: Math.max(3, Number(v) || 9) })}
       />
-      <Toggle label="Barra di stato (HUD)" on={s.ui.showHud} onChange={(v) => patch('ui', { showHud: v })} />
     </div>
   );
 }
@@ -557,6 +566,7 @@ function VoiceTab() {
         />
         <PathField label="piper.exe" value={s.tts.piperExe} onChange={(x) => patch('tts', { piperExe: x })} ext={['exe']} />
         <PathField label="Voce Piper predefinita (.onnx)" value={s.tts.piperModel} onChange={(x) => patch('tts', { piperModel: x })} ext={['onnx']} />
+        <PiperLangVoices />
         <Field label="Volume 0-1" type="number" value={s.tts.volume} onChange={(x) => patch('tts', { volume: Math.min(1, Math.max(0, Number(x))) })} />
         <Field label="ElevenLabs API key" type="password" value={s.tts.elevenKey} onChange={(x) => patch('tts', { elevenKey: x })} />
       </section>
@@ -621,7 +631,7 @@ function ListenTab() {
       <div className="grid grid-cols-3 gap-3">
         <Field label="Porta" type="number" value={s.stt.port} onChange={(x) => patch('stt', { port: Number(x) || 8178 })} />
         <Field label="Thread CPU" type="number" value={s.stt.threads} onChange={(x) => patch('stt', { threads: Number(x) || 4 })} />
-        <Field label="Lingua (it, en, ja, auto)" value={s.stt.language} onChange={(x) => patch('stt', { language: x })} />
+        <Field label="Lingua (it, en, pl, ja, auto)" value={s.stt.language} onChange={(x) => patch('stt', { language: x })} />
       </div>
       <Toggle label="Avvia whisper-server con l'app" on={s.stt.autoStart} onChange={(x) => patch('stt', { autoStart: x })} />
       <Toggle label="Ascolto continuo (VAD)" hint="Altrimenti push-to-talk con la hotkey" on={s.stt.continuous} onChange={(x) => patch('stt', { continuous: x })} />
@@ -1099,6 +1109,45 @@ function LogTab() {
   );
 }
 
+/** Scarica le voci Piper italiana, inglese e polacca accanto a quella predefinita. */
+function PiperLangVoices() {
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {(
+        [
+          ['it', 'IT · paola'],
+          ['en', 'EN · amy'],
+          ['pl', 'PL · gosia'],
+        ] as const
+      ).map(([l, label]) => (
+        <Btn
+          key={l}
+          variant="ghost"
+          disabled={!!busy}
+          onClick={async () => {
+            setBusy(l);
+            setMsg('');
+            try {
+              const p = await downloadPiperVoice(l);
+              setMsg('OK: ' + p);
+            } catch (e) {
+              setMsg(String(e instanceof Error ? e.message : e));
+            } finally {
+              setBusy('');
+            }
+          }}
+        >
+          {busy === l ? '…' : '↓ ' + label}
+        </Btn>
+      ))}
+      <span className="text-[13px] text-dim">Scarica la voce Piper della lingua: viene scelta da sola in base alla lingua.</span>
+      {msg && <span className="w-full font-mono text-[12px] text-cyan">{msg}</span>}
+    </div>
+  );
+}
+
 // ================================================================ PANNELLO
 
 export function SettingsPanel() {
@@ -1117,6 +1166,8 @@ export function SettingsPanel() {
     free: <FreeTab />,
     strumenti: <ToolsTab />,
     passivo: <PassiveTab />,
+    clip: <ClipTab />,
+    lovense: <LovenseTab />,
     memoria: <MemoryTab />,
     log: <LogTab />,
   }[tab] ?? <AvatarTab />;

@@ -5,7 +5,6 @@ import { useCallback, useEffect } from 'react';
 import { Avatar } from './components/Avatar';
 import { CapriOverlay } from './components/Capri';
 import { ChatPanel } from './components/ChatPanel';
-import { Hud } from './components/Overlay';
 import { SettingsPanel } from './components/Settings';
 import { ask, greet, visionTick } from './lib/brain';
 import { norm, trackForeground } from './lib/actions';
@@ -16,6 +15,7 @@ import { log, useApp } from './lib/store';
 import { ensureWhisper, mic, transcribe } from './lib/stt';
 import { autodetectTools } from './lib/tools';
 import { T } from './lib/i18n';
+import { clipThat, isClipCommand } from './lib/clip';
 
 /** In modalità passiva: dopo la parola di attivazione la frase successiva è il comando. */
 let awaitingCommandUntil = 0;
@@ -45,7 +45,9 @@ async function onUtterance(wav: Uint8Array) {
   const st = useApp.getState();
   const passive = st.settings.passive;
   const listeningForCommand = Date.now() < awaitingCommandUntil;
-  if (!passive.on || listeningForCommand) st.setStatus({ thinking: true });
+  // microfono aperto solo per i comandi di clip (niente Hey Capri, niente ascolto continuo)
+  const clipOnly = st.settings.clip.enabled && st.settings.clip.voice && !passive.on && !st.settings.stt.continuous && !listeningForCommand;
+  if ((!passive.on || listeningForCommand) && !clipOnly) st.setStatus({ thinking: true });
   let text = '';
   try {
     text = await transcribe(wav);
@@ -54,6 +56,23 @@ async function onUtterance(wav: Uint8Array) {
   } finally {
     useApp.getState().setStatus({ thinking: false });
   }
+  // "Capri clip that" / "Capri clippa": niente AI, si salva subito il clip
+  if (isClipCommand(text)) {
+    awaitingCommandUntil = 0;
+    try {
+      const how = await clipThat();
+      if (how !== 'skip') {
+        const reply = useApp.getState().settings.clip.reply;
+        if (reply) greet(reply);
+        else useApp.getState().showBalloon(T('Clippato, choom.') + ` [${how.toUpperCase()}]`, 'happy');
+      }
+    } catch (e) {
+      log('error', 'clip', String(e instanceof Error ? e.message : e));
+      useApp.getState().showBalloon(T('Clip fallito: controlla Impostazioni → Clip.'), 'sad');
+    }
+    return;
+  }
+  if (clipOnly) return;
   if (passive.on && !listeningForCommand) {
     const cmd = matchWake(text, passive.words || 'hey capri');
     if (cmd === null) return; // frase senza parola di attivazione: ignorata
@@ -85,7 +104,8 @@ export default function App() {
   const lock = useApp((s) => s.lockInteractive);
   const hotkey = useApp((s) => s.settings.hotkey);
   const passiveOn = useApp((s) => s.settings.passive.on);
-  const continuous = useApp((s) => s.settings.stt.continuous) || passiveOn;
+  const clipVoice = useApp((s) => s.settings.clip.enabled && s.settings.clip.voice);
+  const continuous = useApp((s) => s.settings.stt.continuous) || passiveOn || clipVoice;
   const visionOn = useApp((s) => s.settings.vision.enabled);
   const interval = useApp((s) => s.settings.vision.intervalSec);
   const baseUrl = useApp((s) => s.settings.local.baseUrl);
@@ -179,7 +199,6 @@ export default function App() {
   return (
     <main className="relative h-screen w-screen" aria-label="Cyber AI overlay">
       {lock && <div className="pointer-events-none absolute inset-0 border-2 border-cyan/60" aria-hidden="true" />}
-      <Hud />
       {mode === 'capri' ? <CapriOverlay onListen={() => void listenOnce()} /> : <Avatar onMic={toggleContinuous} />}
       <AnimatePresence>
         {panel === 'chat' && <ChatPanel key="chat" onPtt={(d) => void ptt(d)} />}

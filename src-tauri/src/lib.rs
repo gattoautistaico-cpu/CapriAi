@@ -648,6 +648,155 @@ fn toggle_window(app: &AppHandle) {
     }
 }
 
+// ---------------------------------------------------------------- clip (tasti rapidi di Medal / AMD / NVIDIA / Game Bar)
+
+/// Codice virtual-key per un nome di tasto ("ctrl", "f10", "s", "win", ...).
+fn vk_code(k: &str) -> Option<u8> {
+    let k = k.trim().to_ascii_lowercase();
+    let v = match k.as_str() {
+        "ctrl" | "control" | "ctl" => 0x11,
+        "shift" => 0x10,
+        "alt" | "menu" => 0x12,
+        "win" | "windows" | "meta" | "super" => 0x5B,
+        "space" | "spazio" => 0x20,
+        "enter" | "return" | "invio" => 0x0D,
+        "tab" => 0x09,
+        "esc" | "escape" => 0x1B,
+        "home" => 0x24,
+        "end" => 0x23,
+        "insert" | "ins" => 0x2D,
+        "delete" | "del" | "canc" => 0x2E,
+        "pageup" | "pgup" => 0x21,
+        "pagedown" | "pgdn" => 0x22,
+        "print" | "printscreen" | "prtsc" | "stamp" => 0x2C,
+        "scrolllock" => 0x91,
+        "pause" => 0x13,
+        "up" => 0x26,
+        "down" => 0x28,
+        "left" => 0x25,
+        "right" => 0x27,
+        "numpad0" => 0x60,
+        _ => {
+            if k.len() == 1 {
+                let c = k.as_bytes()[0];
+                if c.is_ascii_alphabetic() {
+                    return Some(c.to_ascii_uppercase());
+                }
+                if c.is_ascii_digit() {
+                    return Some(c);
+                }
+                return None;
+            }
+            if let Some(n) = k.strip_prefix('f').and_then(|n| n.parse::<u8>().ok()) {
+                if (1..=24).contains(&n) {
+                    return Some(0x6F + n);
+                }
+            }
+            if let Some(n) = k.strip_prefix("numpad").and_then(|n| n.parse::<u8>().ok()) {
+                if n <= 9 {
+                    return Some(0x60 + n);
+                }
+            }
+            return None;
+        }
+    };
+    Some(v)
+}
+
+/// Preme una combinazione di tasti (es. "Ctrl+Shift+S", "Alt+F10", "F8") a livello di sistema.
+#[tauri::command]
+async fn send_hotkey(combo: String) -> Result<(), String> {
+    let keys: Vec<u8> = combo
+        .split('+')
+        .filter(|x| !x.trim().is_empty())
+        .map(|k| vk_code(k).ok_or_else(|| format!("tasto sconosciuto: {k}")))
+        .collect::<Result<_, _>>()?;
+    if keys.is_empty() {
+        return Err("combinazione vuota".into());
+    }
+    #[cfg(windows)]
+    tauri::async_runtime::spawn_blocking(move || unsafe {
+        const KEYUP: u32 = 0x0002;
+        const EXT: u32 = 0x0001;
+        let ext = |vk: u8| {
+            if matches!(vk, 0x21..=0x2E | 0x5B) {
+                EXT
+            } else {
+                0
+            }
+        };
+        for &k in &keys {
+            keybd_event(k, 0, ext(k), 0);
+            std::thread::sleep(std::time::Duration::from_millis(35));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        for &k in keys.iter().rev() {
+            keybd_event(k, 0, ext(k) | KEYUP, 0);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(not(windows))]
+    let _ = keys;
+    Ok(())
+}
+
+/// Nomi (minuscoli) dei processi in esecuzione, per capire quale software di clip è attivo.
+#[tauri::command]
+async fn running_processes() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let mut cmd = Command::new("tasklist");
+        cmd.args(["/FO", "CSV", "/NH"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        hide_window(&mut cmd);
+        let out = cmd.output().map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let mut v: Vec<String> = text
+            .lines()
+            .filter_map(|l| l.split("\",\"").next())
+            .map(|n| n.trim_matches('"').to_ascii_lowercase())
+            .filter(|n| !n.is_empty())
+            .collect();
+        v.sort();
+        v.dedup();
+        Ok(v)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Scarica un file (solo voci Piper da Hugging Face) nel percorso indicato.
+#[tauri::command]
+async fn download_file(url: String, dest: String) -> Result<(), String> {
+    if !url.starts_with("https://huggingface.co/rhasspy/piper-voices/") {
+        return Err("URL non consentito".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let tmp = format!("{dest}.part");
+        let script = format!(
+            "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing -Uri '{}' -OutFile '{}'",
+            url.replace('\'', "''"),
+            tmp.replace('\'', "''")
+        );
+        let mut cmd = Command::new("powershell.exe");
+        cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
+        hide_window(&mut cmd);
+        let out = cmd.output().map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(String::from_utf8_lossy(&out.stderr).chars().take(300).collect());
+        }
+        std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
 
 // ---------------------------------------------------------------- lingua menu tray
 
@@ -669,9 +818,27 @@ fn os_is_italian() -> bool {
 
 fn tray_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>, it: bool) -> tauri::Result<Menu<R>> {
     let l = |a: &'static str, b: &'static str| if it { a } else { b };
-    let toggle = MenuItem::with_id(app, "toggle", l("Mostra / Nascondi", "Show / Hide"), true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", l("Impostazioni", "Settings"), true, None::<&str>)?;
-    let interact = MenuItem::with_id(app, "interact", l("Blocca/Sblocca interazione", "Lock/Unlock interaction"), true, None::<&str>)?;
+    let toggle = MenuItem::with_id(
+        app,
+        "toggle",
+        l("Mostra / Nascondi", "Show / Hide"),
+        true,
+        None::<&str>,
+    )?;
+    let settings = MenuItem::with_id(
+        app,
+        "settings",
+        l("Impostazioni", "Settings"),
+        true,
+        None::<&str>,
+    )?;
+    let interact = MenuItem::with_id(
+        app,
+        "interact",
+        l("Blocca/Sblocca interazione", "Lock/Unlock interaction"),
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", l("Esci", "Quit"), true, None::<&str>)?;
     Menu::with_items(app, &[&toggle, &settings, &interact, &quit])
 }
@@ -735,6 +902,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             set_tray_lang,
+            send_hotkey,
+            running_processes,
+            download_file,
             set_hit_rects,
             set_interactive,
             capture_screen,

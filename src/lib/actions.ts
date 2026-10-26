@@ -120,7 +120,7 @@ export async function webSearch(q: string): Promise<WebResult[]> {
 // ------------------------------------------------------------ schermo
 
 export const SCREEN_RE =
-  /\b(schermo|schermata|sto (guardando|leggendo|vedendo)|cosa (c'è|vedo)|questa (pagina|chat|app|foto|immagine|mail|email|notizia|finestra)|questo (articolo|messaggio|post|video|testo|errore|codice)|leggi(mi)?|riassumi(mi)?|traducimi|on (my )?screen|what am i looking at)\b/i;
+  /\b(schermo|schermata|sto (guardando|leggendo|vedendo)|cosa (c'è|vedo)|questa (pagina|chat|app|foto|immagine|mail|email|notizia|finestra)|questo (articolo|messaggio|post|video|testo|errore|codice)|leggi(mi)?|riassumi(mi)?|traducimi|on (my )?screen|what am i looking at|this (page|message|error|window)|read (this|it)|ekran\w*|przeczytaj|streść|co (tu|to) jest napisane|ta (strona|wiadomość))\b/i;
 
 /** Ultimo titolo di finestra che non sia Cyber AI (aggiornato in background). */
 let lastTitle = '';

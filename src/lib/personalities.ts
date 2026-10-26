@@ -84,7 +84,9 @@ export function buildSystemPrompt(opts: {
     BASE,
     I18N.lang === 'en'
       ? 'Always reply in English (the user set the app to English), unless the user clearly writes in another language.'
-      : "Rispondi SEMPRE in italiano, a meno che l'utente non scriva chiaramente in un'altra lingua.",
+      : I18N.lang === 'pl'
+        ? 'Zawsze odpowiadaj po polsku (użytkownik ustawił aplikację na język polski), chyba że użytkownik wyraźnie pisze w innym języku. Always reply in Polish.'
+        : "Rispondi SEMPRE in italiano, a meno che l'utente non scriva chiaramente in un'altra lingua.",
     persona,
     opts.userName ? `L'utente si chiama ${opts.userName}.` : '',
     opts.facts.length ? `Cose che sai sull'utente:\n- ${opts.facts.join('\n- ')}` : '',

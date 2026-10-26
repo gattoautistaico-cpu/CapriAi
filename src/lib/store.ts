@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   vision: { enabled: false, intervalSec: 45, maxWidth: 1024, react: true, minReactGapSec: 120 },
   hotkey: 'CommandOrControl+Shift+W',
   activeProfileId: '',
-  ui: { showHud: true, balloonSec: 9, userName: '', mode: 'capri', lang: '' },
+  ui: { showHud: false, balloonSec: 9, userName: '', mode: 'capri', lang: '' },
   capri: { frameWidth: 380, sleepSec: 90, typeCps: 32, glitch: true },
   music: {
     provider: 'auto',
@@ -57,6 +57,32 @@ export const DEFAULT_SETTINGS: Settings = {
   tools: { on: true, apps: true, web: true, screen: true, calls: true },
   passive: { on: false, words: 'hey capri, ehi capri', greeting: '' },
   contacts: [],
+  clip: {
+    enabled: true,
+    voice: false,
+    backend: 'auto',
+    phrases: 'capri clip that, capri clippa, capri clippalo, capri klip, clip that, clippa',
+    hotkeys: { medal: 'F8', amd: 'Ctrl+Shift+S', nvidia: 'Alt+F10', gamebar: 'Win+Alt+G', custom: '' },
+    reply: '',
+    sound: true,
+  },
+  lovense: {
+    enabled: false,
+    url: 'https://127-0-0-1.lovense.club:30010',
+    toy: '',
+    maxLevel: 20,
+    aiControl: true,
+    moodLink: false,
+    moodMap: { happy: '', love: 'heartbeat', smug: '', surprised: 'spark', angry: '', sad: '' },
+    moodSec: 6,
+    patterns: [
+      { id: 'heartbeat', name: 'Heartbeat', features: 'v', intervalMs: 150, steps: [14, 4, 18, 2, 0, 0, 0, 0], durationSec: 10 },
+      { id: 'wave', name: 'Onda', features: '', intervalMs: 200, steps: [2, 5, 8, 11, 14, 17, 20, 17, 14, 11, 8, 5], durationSec: 20 },
+      { id: 'tease', name: 'Tease', features: 'v', intervalMs: 300, steps: [6, 0, 8, 0, 4, 10, 0, 0, 12, 2], durationSec: 30 },
+      { id: 'crescendo', name: 'Crescendo', features: '', intervalMs: 500, steps: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], durationSec: 20 },
+      { id: 'spark', name: 'Spark', features: 'v', intervalMs: 100, steps: [20, 0, 20, 0, 12, 0], durationSec: 3 },
+    ],
+  },
   firstRun: true,
 };
 
@@ -232,6 +258,8 @@ function mergeSettings(saved: Partial<Settings> | null | undefined): Settings {
     tools: { ...d.tools, ...(saved.tools ?? {}) },
     passive: { ...d.passive, ...(saved.passive ?? {}) },
     contacts: saved.contacts ?? [],
+    clip: { ...d.clip, ...(saved.clip ?? {}), hotkeys: { ...d.clip.hotkeys, ...(saved.clip?.hotkeys ?? {}) } },
+    lovense: { ...d.lovense, ...(saved.lovense ?? {}), moodMap: { ...d.lovense.moodMap, ...(saved.lovense?.moodMap ?? {}) }, patterns: saved.lovense?.patterns ?? d.lovense.patterns },
     extra: [
       ...d.extra.map((x) => ({ ...x, ...((saved.extra ?? []).find((y) => y.id === x.id) ?? {}) })),
       ...(saved.extra ?? []).filter((y) => !d.extra.some((x) => x.id === y.id)),
@@ -255,7 +283,7 @@ export async function loadPersisted(): Promise<void> {
     const settings = mergeSettings(await disk.get<Settings>('settings'));
     if (!settings.ui.lang) {
       settings.ui = { ...settings.ui, lang: I18N.detect() };
-      if (settings.ui.lang === 'en' && settings.stt.language === 'it') settings.stt = { ...settings.stt, language: 'en' };
+      if (settings.ui.lang !== 'it' && settings.stt.language === 'it') settings.stt = { ...settings.stt, language: settings.ui.lang };
     }
     let profiles = (await disk.get<Profile[]>('profiles')) ?? [];
     const facts = (await disk.get<Fact[]>('facts')) ?? [];
