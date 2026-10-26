@@ -1,0 +1,80 @@
+@import 'tailwindcss';
+
+/* Design system Cyber AI (vedi canvas): giallo Edge, rosso caldo, cyan rete */
+@theme {
+  --color-void: #0a0a0f;
+  --color-panel: #15121c;
+  --color-edge: #2a2438;
+  --color-fg: #f2f0e6;
+  --color-muted: #a9a3bd;
+  --color-dim: #8c86a0;
+  --color-yellow: #fcee0a;
+  --color-red: #ff003c;
+  --color-cyan: #00f0ff;
+  --color-magenta: #ff2e88;
+  --color-ok: #3df5a0;
+  --color-warn: #ffb547;
+  --font-display: 'Orbitron', 'Bahnschrift', 'Segoe UI', sans-serif;
+  --font-ui: 'Rajdhani', 'Bahnschrift', 'Segoe UI', sans-serif;
+  --font-mono: 'Share Tech Mono', 'Cascadia Mono', Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent !important;
+  font-family: var(--font-ui);
+  color: var(--color-fg);
+  user-select: none;
+}
+
+.cut-sm {
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+.cut-br {
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%);
+}
+.cut-slab {
+  clip-path: polygon(0 0, 100% 0, calc(100% - 16px) 100%, 0 100%);
+}
+.glass {
+  background: rgba(10, 10, 15, 0.82);
+  backdrop-filter: blur(10px);
+}
+.scanlines {
+  background-image: repeating-linear-gradient(0deg, transparent 0 2px, rgba(0, 0, 0, 0.22) 3px);
+}
+.stripes {
+  background: repeating-linear-gradient(45deg, rgba(252, 238, 10, 0.06) 0 12px, transparent 12px 24px);
+}
+
+@keyframes glitch {
+  0%, 92%, 100% { transform: none; filter: none; }
+  93% { transform: translate(3px, -1px); filter: drop-shadow(-3px 0 0 #ff003c) drop-shadow(3px 0 0 #00f0ff); }
+  95% { transform: translate(-4px, 1px); }
+  97% { transform: translate(2px, 0); }
+}
+.glitch {
+  animation: glitch 7s infinite;
+}
+
+input,
+textarea,
+select {
+  user-select: text;
+  font-family: var(--font-mono);
+}
+:focus-visible {
+  outline: 2px solid var(--color-cyan);
+  outline-offset: 2px;
+}
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: #2a2438; }
+
+@media (prefers-reduced-motion: reduce) {
+  .glitch { animation: none; }
+}
