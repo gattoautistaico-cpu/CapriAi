@@ -138,6 +138,8 @@ if (Ask 'Installare whisper.cpp?') {
   $hf = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main'
   if ($wm -in '1', '3') { Download "$hf/ggml-small.bin" (Join-Path $Models 'ggml-small.bin') }
   if ($wm -in '2', '3') { Download "$hf/ggml-medium-q5_0.bin" (Join-Path $Models 'ggml-medium-q5_0.bin') }
+  # modello piccolo per la parola di attivazione e i comandi rapidi (latenza bassa)
+  Download "$hf/ggml-base-q5_1.bin" (Join-Path $Models 'ggml-base-q5_1.bin')
 }
 
 # ------------------------------------------------------------------ TTS

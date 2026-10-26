@@ -33,13 +33,17 @@ export const DEFAULT_SETTINGS: Settings = {
     autoStart: true,
     continuous: false,
     vadThreshold: 0.02,
+    muted: false,
+    silenceMs: 550,
+    maxPassiveSec: 6,
+    fastModel: '',
   },
-  tts: { engine: 'piper', piperExe: '', piperModel: '', elevenKey: '', volume: 0.9 },
+  tts: { engine: 'piper', piperExe: '', piperModel: '', elevenKey: '', volume: 0.9, blips: { pitch: 520, wave: 'square', volume: 0.35, variance: 0.08 } },
   vision: { enabled: false, intervalSec: 45, maxWidth: 1024, react: true, minReactGapSec: 120 },
   hotkey: 'CommandOrControl+Shift+W',
   activeProfileId: '',
   ui: { showHud: false, balloonSec: 9, userName: '', mode: 'capri', streamVisible: true, lang: '' },
-  capri: { frameWidth: 380, sleepSec: 90, typeCps: 32, glitch: true },
+  capri: { frameWidth: 380, sleepSec: 90, typeCps: 32, glitch: true, dragMode: 'lightning', clingy: false },
   music: {
     provider: 'auto',
     swiftfree: { baseUrl: 'http://127.0.0.1:47800', token: '', exePath: '', autoLaunch: true },
@@ -66,6 +70,8 @@ export const DEFAULT_SETTINGS: Settings = {
     reply: '',
     sound: true,
   },
+  replay: { enabled: false, ffmpeg: '', dir: '', seconds: 30, fps: 30, encoder: '', audio: '' },
+  keys: { openClips: 'CommandOrControl+Alt+C', clip: 'CommandOrControl+Alt+X' },
   lovense: {
     enabled: false,
     url: 'https://127-0-0-1.lovense.club:30010',
@@ -138,7 +144,15 @@ interface AppState {
   status: Status;
   balloon: { text: string; mood: string; ts: number } | null;
   /** ultimo scambio per il terminale Capri */
-  exchange: { user: string; np: string; ts: number };
+  exchange: { user: string; np: string; sys: string; ts: number };
+  /** modalità di Capri (comandi rapidi): normale, DJ, ricerca */
+  capriMode: 'normal' | 'dj' | 'search';
+  /** effetto di passaggio: REWIRING (cambio modalità), CLIPPED (clip salvato) */
+  capriFx: { kind: 'rewiring' | 'clipped'; ts: number } | null;
+  setCapriMode: (m: AppState['capriMode']) => void;
+  setCapriFx: (k: 'rewiring' | 'clipped' | null) => void;
+  menuOpen: boolean;
+  setMenuOpen: (v: boolean) => void;
   /** conferma chiamata in corso */
   confirm: { label: string; until: number; run: () => void } | null;
   setConfirm: (c: AppState['confirm']) => void;
@@ -185,7 +199,13 @@ export const useApp = create<AppState>((set, get) => ({
     lastScreen: '',
   },
   balloon: null,
-  exchange: { user: '', np: '', ts: 0 },
+  exchange: { user: '', np: '', sys: '', ts: 0 },
+  capriMode: 'normal',
+  capriFx: null,
+  setCapriMode: (m) => set({ capriMode: m }),
+  setCapriFx: (k) => set({ capriFx: k ? { kind: k, ts: Date.now() } : null }),
+  menuOpen: false,
+  setMenuOpen: (v) => set({ menuOpen: v }),
   confirm: null,
   setConfirm: (c) => set({ confirm: c }),
   transientMood: null,
@@ -250,7 +270,7 @@ function mergeSettings(saved: Partial<Settings> | null | undefined): Settings {
     gemini: { ...d.gemini, ...(saved.gemini ?? {}) },
     openrouter: { ...d.openrouter, ...(saved.openrouter ?? {}) },
     stt: { ...d.stt, ...(saved.stt ?? {}) },
-    tts: { ...d.tts, ...(saved.tts ?? {}) },
+    tts: { ...d.tts, ...(saved.tts ?? {}), blips: { ...d.tts.blips, ...(saved.tts?.blips ?? {}) } },
     vision: { ...d.vision, ...(saved.vision ?? {}) },
     ui: { ...d.ui, ...(saved.ui ?? {}) },
     capri: { ...d.capri, ...(saved.capri ?? {}) },
@@ -258,6 +278,8 @@ function mergeSettings(saved: Partial<Settings> | null | undefined): Settings {
     tools: { ...d.tools, ...(saved.tools ?? {}) },
     passive: { ...d.passive, ...(saved.passive ?? {}) },
     contacts: saved.contacts ?? [],
+    replay: { ...d.replay, ...(saved.replay ?? {}) },
+    keys: { ...d.keys, ...(saved.keys ?? {}) },
     clip: { ...d.clip, ...(saved.clip ?? {}), hotkeys: { ...d.clip.hotkeys, ...(saved.clip?.hotkeys ?? {}) } },
     lovense: { ...d.lovense, ...(saved.lovense ?? {}), moodMap: { ...d.lovense.moodMap, ...(saved.lovense?.moodMap ?? {}) }, patterns: saved.lovense?.patterns ?? d.lovense.patterns },
     extra: [

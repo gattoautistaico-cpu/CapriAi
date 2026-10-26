@@ -167,6 +167,16 @@ function ModeTab() {
           <Field label="Velocità testo (car/s)" type="number" value={s.capri.typeCps} onChange={(v) => patch('capri', { typeCps: Math.max(5, Number(v) || 32) })} />
         </div>
         <Toggle label="Effetti glitch" hint="Transizioni e disturbi RGB" on={s.capri.glitch} onChange={(v) => patch('capri', { glitch: v })} />
+        <Select
+          label="Drag mode"
+          value={s.capri.dragMode}
+          onChange={(v) => patch('capri', { dragMode: v as S['capri']['dragMode'] })}
+          options={[
+            { value: 'lightning', label: 'Lightning: lazo a fulmine, poi salta lì' },
+            { value: 'normal', label: 'Normal: trascina dall’etichetta' },
+          ]}
+        />
+        <p className="m-0 text-[14px] text-muted">Tasto destro su Capri = menu (microfono, voce, memoria, instant replay, clingy mode, drag mode).</p>
         <Toggle
           label="Visibile in Discord / OBS"
           hint="Capri compare nella condivisione schermo e nelle registrazioni. Dai suoi screenshot resta comunque esclusa."
@@ -567,9 +577,11 @@ function VoiceTab() {
             { value: 'piper', label: 'Piper (locale, consigliato)' },
             { value: 'webspeech', label: 'Voci Windows (offline)' },
             { value: 'elevenlabs', label: 'ElevenLabs (cloud)' },
+            { value: 'blips', label: 'Blip stile Undertale (niente voce)' },
             { value: 'off', label: 'Disattivato' },
           ]}
         />
+        {(s.tts.engine === 'blips' || prof.voice.engine === 'blips') && <BlipsFields />}
         <PathField label="piper.exe" value={s.tts.piperExe} onChange={(x) => patch('tts', { piperExe: x })} ext={['exe']} />
         <PathField label="Voce Piper predefinita (.onnx)" value={s.tts.piperModel} onChange={(x) => patch('tts', { piperModel: x })} ext={['onnx']} />
         <PiperLangVoices />
@@ -587,6 +599,7 @@ function VoiceTab() {
             { value: 'piper', label: 'Piper' },
             { value: 'webspeech', label: 'Voci Windows' },
             { value: 'elevenlabs', label: 'ElevenLabs' },
+            { value: 'blips', label: 'Blip stile Undertale' },
             { value: 'off', label: 'Muta' },
           ]}
         />
@@ -610,6 +623,65 @@ function VoiceTab() {
           ▶ Test voce
         </Btn>
       </section>
+    </div>
+  );
+}
+
+function BlipsFields() {
+  const { s, patch } = useSet();
+  const b = s.tts.blips;
+  const setB = (p: Partial<S['tts']['blips']>) => patch('tts', { blips: { ...b, ...p } });
+  return (
+    <div className="grid grid-cols-4 gap-3">
+      <Field label="Tono blip (Hz)" type="number" value={b.pitch} onChange={(x) => setB({ pitch: Math.max(80, Math.min(2000, Number(x) || 520)) })} />
+      <Select
+        label="Onda"
+        value={b.wave}
+        onChange={(x) => setB({ wave: x as S['tts']['blips']['wave'] })}
+        options={[
+          { value: 'square', label: 'Square' },
+          { value: 'triangle', label: 'Triangle' },
+          { value: 'sawtooth', label: 'Sawtooth' },
+          { value: 'sine', label: 'Sine' },
+        ]}
+      />
+      <Field label="Volume blip 0-1" type="number" value={b.volume} onChange={(x) => setB({ volume: Math.max(0, Math.min(1, Number(x))) })} />
+      <Field label="Variazione 0-0.3" type="number" value={b.variance} onChange={(x) => setB({ variance: Math.max(0, Math.min(0.3, Number(x))) })} />
+    </div>
+  );
+}
+
+/** Scarica il modello whisper piccolo (base q5_1) accanto a quello principale. */
+function FastModelDownload() {
+  const { s, patch } = useSet();
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Btn
+        variant="ghost"
+        disabled={busy || !s.stt.whisperModel}
+        onClick={async () => {
+          setBusy(true);
+          setMsg('');
+          try {
+            const m = s.stt.whisperModel;
+            const dir = m.slice(0, m.length - (m.split(/[\\/]/).pop() ?? '').length);
+            const dest = dir + 'ggml-base-q5_1.bin';
+            await invoke('download_file', { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin', dest });
+            patch('stt', { fastModel: dest });
+            await ensureWhisper();
+            setMsg('OK: ' + dest);
+          } catch (e) {
+            setMsg(String(e instanceof Error ? e.message : e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? '…' : '↓ base q5_1 (57 MB)'}
+      </Btn>
+      {msg && <span className="font-mono text-[12px] text-cyan">{msg}</span>}
     </div>
   );
 }
@@ -648,6 +720,29 @@ function ListenTab() {
         onChange={(x) => patch('stt', { vadThreshold: Number(x) || 0.02 })}
       />
       <Field label="Hotkey push-to-talk (tieni premuto)" value={s.hotkey} onChange={(x) => patch('hotkey', x)} hint="Formato: CommandOrControl+Shift+W. Riavvia l'app dopo la modifica." />
+      <H n="08b">Latenza</H>
+      <div className="grid grid-cols-2 gap-3">
+        <Field
+          label="Fine frase dopo (ms di silenzio)"
+          type="number"
+          value={s.stt.silenceMs}
+          onChange={(x) => patch('stt', { silenceMs: Math.max(250, Math.min(2000, Number(x) || 550)) })}
+          hint="Più basso = risponde prima (350-600 consigliato)"
+        />
+        <Field
+          label="Ascolto passivo: frasi max (s)"
+          type="number"
+          value={s.stt.maxPassiveSec}
+          onChange={(x) => patch('stt', { maxPassiveSec: Math.max(2, Math.min(30, Number(x) || 6)) })}
+          hint="Le frasi più lunghe (chiacchiere) non vengono trascritte"
+        />
+      </div>
+      <PathField label="Modello veloce per comandi e parola di attivazione (opzionale)" value={s.stt.fastModel} onChange={(x) => patch('stt', { fastModel: x })} ext={['bin']} />
+      <FastModelDownload />
+      <p className="m-0 text-[14px] text-muted">
+        I comandi rapidi (clip, DJ mode, search mode, musica, apri app, YouTube, Google) partono subito dopo la trascrizione, senza passare dall'AI. Con il modello veloce
+        (base, ~60 MB) Hey Capri e "clip that" vengono riconosciuti in circa un decimo del tempo.
+      </p>
       <div className="flex items-center gap-3">
         <Btn variant="cyan" onClick={() => void ensureWhisper()}>
           Avvia / verifica server

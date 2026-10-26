@@ -15,7 +15,9 @@ import { log, useApp } from './lib/store';
 import { ensureWhisper, mic, transcribe } from './lib/stt';
 import { autodetectTools } from './lib/tools';
 import { T } from './lib/i18n';
-import { clipThat, isClipCommand } from './lib/clip';
+import { isClipCommand } from './lib/clip';
+import { applyReplay, openClipsFolder } from './lib/replay';
+import { preloadApps } from './lib/actions';
 
 /** In modalità passiva: dopo la parola di attivazione la frase successiva è il comando. */
 let awaitingCommandUntil = 0;
@@ -41,35 +43,54 @@ function matchWake(heard: string, words: string): string | null {
   return null;
 }
 
-async function onUtterance(wav: Uint8Array) {
+/** Durata in secondi di un WAV 16 kHz mono 16 bit. */
+const wavSec = (wav: Uint8Array) => Math.max(0, wav.length - 44) / 32000;
+
+// coda delle frasi: al massimo una in attesa (la più recente), così i comandi non restano dietro le chiacchiere
+let sttBusy = false;
+let pending: Uint8Array | null = null;
+
+function onUtterance(wav: Uint8Array) {
+  if (sttBusy) {
+    if (pending) log('info', 'stt', 'frase vecchia scartata (latenza)');
+    pending = wav;
+    return;
+  }
+  sttBusy = true;
+  void handleUtterance(wav).finally(() => {
+    sttBusy = false;
+    const next = pending;
+    pending = null;
+    if (next) onUtterance(next);
+  });
+}
+
+async function handleUtterance(wav: Uint8Array) {
   const st = useApp.getState();
+  if (st.settings.stt.muted) return;
   const passive = st.settings.passive;
   const listeningForCommand = Date.now() < awaitingCommandUntil;
   // microfono aperto solo per i comandi di clip (niente Hey Capri, niente ascolto continuo)
   const clipOnly = st.settings.clip.enabled && st.settings.clip.voice && !passive.on && !st.settings.stt.continuous && !listeningForCommand;
-  if ((!passive.on || listeningForCommand) && !clipOnly) st.setStatus({ thinking: true });
+  const background = (passive.on || clipOnly) && !listeningForCommand;
+  // in ascolto passivo i comandi sono brevi: le frasi lunghe sono chiacchiere, non si trascrivono nemmeno
+  if (background && wavSec(wav) > Math.max(2, st.settings.stt.maxPassiveSec || 6)) {
+    log('info', 'stt', `frase di ${wavSec(wav).toFixed(1)} s ignorata in ascolto passivo`);
+    return;
+  }
+  if (!background) st.setStatus({ thinking: true });
   let text = '';
   try {
-    text = await transcribe(wav);
+    text = await transcribe(wav, { fast: background });
   } catch (e) {
     log('error', 'stt', String(e));
   } finally {
     useApp.getState().setStatus({ thinking: false });
   }
-  // "Capri clip that" / "Capri clippa": niente AI, si salva subito il clip
+  // "Capri clip that" / "Capri clippa": comando rapido, niente AI
   if (isClipCommand(text)) {
     awaitingCommandUntil = 0;
-    try {
-      const how = await clipThat();
-      if (how !== 'skip') {
-        const reply = useApp.getState().settings.clip.reply;
-        if (reply) greet(reply);
-        else useApp.getState().showBalloon(T('Clippato, choom.') + ` [${how.toUpperCase()}]`, 'happy');
-      }
-    } catch (e) {
-      log('error', 'clip', String(e instanceof Error ? e.message : e));
-      useApp.getState().showBalloon(T('Clip fallito: controlla Impostazioni → Clip.'), 'sad');
-    }
+    await ask(text, { voice: true, src: 'wake' });
     return;
   }
   if (clipOnly) return;
@@ -103,6 +124,8 @@ export default function App() {
   const panel = useApp((s) => s.panel);
   const lock = useApp((s) => s.lockInteractive);
   const hotkey = useApp((s) => s.settings.hotkey);
+  const keys = useApp((s) => s.settings.keys);
+  const replayOn = useApp((s) => s.settings.replay.enabled);
   const passiveOn = useApp((s) => s.settings.passive.on);
   const clipVoice = useApp((s) => s.settings.clip.enabled && s.settings.clip.voice);
   const continuous = useApp((s) => s.settings.stt.continuous) || passiveOn || clipVoice;
@@ -121,6 +144,7 @@ export default function App() {
   useEffect(() => {
     startHitSync();
     trackForeground();
+    preloadApps();
     void autodetectTools().then(() => ensureWhisper());
     const st = useApp.getState();
     if (st.settings.firstRun) {
@@ -155,6 +179,19 @@ export default function App() {
           else if (e.state === 'Released') void ptt(false);
         });
         log('info', 'hotkey', `push-to-talk: ${hotkey}`);
+        // scorciatoie del menu Capri: apri cartella clip, clip immediato
+        const extra: [string, () => void][] = [
+          [keys.openClips, () => void openClipsFolder().catch((err) => log('error', 'replay', String(err)))],
+          [keys.clip, () => void ask('clip that', { src: 'hotkey' })],
+        ];
+        for (const [k, fn] of extra) {
+          if (!k || k === hotkey) continue;
+          try {
+            await register(k, (e) => e.state === 'Pressed' && fn());
+          } catch (err) {
+            log('warn', 'hotkey', `${k}: ${String(err)}`);
+          }
+        }
       } catch (e) {
         log('error', 'hotkey', `registrazione ${hotkey} fallita: ${String(e)}`);
       }
@@ -162,7 +199,12 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [hotkey, ptt]);
+  }, [hotkey, ptt, keys.openClips, keys.clip]);
+
+  // instant replay di Capri (ffmpeg)
+  useEffect(() => {
+    void applyReplay();
+  }, [replayOn]);
 
   // ascolto continuo
   useEffect(() => {

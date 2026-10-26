@@ -70,12 +70,73 @@ async function playBuffer(buf: ArrayBuffer, volume: number): Promise<void> {
   level = 0;
 }
 
+// ------------------------------------------------------------ voce "Undertale" (blip)
+
+let blipNodes: OscillatorNode[] = [];
+let blipDone: (() => void) | null = null;
+
+/**
+ * Un blip per lettera, sincronizzato con la macchina da scrivere del terminale
+ * (stessa velocità in caratteri/s). Niente sintesi vocale: zero latenza.
+ */
+function speakBlips(text: string, volume: number): Promise<void> {
+  const st = useApp.getState().settings;
+  const b = st.tts.blips;
+  const c = ensureCtx();
+  const step = 1 / Math.max(5, st.capri.typeCps || 32);
+  const t0 = c.currentTime + 0.03;
+  let last = -1;
+  blipNodes = [];
+  [...text].forEach((ch, i) => {
+    if (!/[\p{L}\p{N}]/u.test(ch)) return;
+    const t = t0 + i * step;
+    if (t - last < 0.045) return;
+    last = t;
+    const osc = c.createOscillator();
+    osc.type = b.wave;
+    // vocali leggermente più acute, piccola variazione casuale come in Undertale
+    const vowel = /[aeiouàèéìòùy]/i.test(ch) ? 1.06 : 1;
+    osc.frequency.setValueAtTime(b.pitch * vowel * (1 + (Math.random() * 2 - 1) * b.variance), t);
+    const g = c.createGain();
+    const len = Math.min(0.075, step * 0.9);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(Math.max(0.0002, b.volume * volume), t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    osc.connect(g);
+    g.connect(analyser!);
+    osc.start(t);
+    osc.stop(t + len + 0.01);
+    blipNodes.push(osc);
+  });
+  meter();
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => finish(), (text.length * step + 0.2) * 1000);
+    const finish = () => {
+      window.clearTimeout(timer);
+      cancelAnimationFrame(rafId);
+      level = 0;
+      blipDone = null;
+      resolve();
+    };
+    blipDone = finish;
+  });
+}
+
 export function stopSpeaking(): void {
   try {
     source?.stop();
   } catch {
     /* già fermo */
   }
+  blipNodes.forEach((o) => {
+    try {
+      o.stop();
+    } catch {
+      /* già fermo */
+    }
+  });
+  blipNodes = [];
+  blipDone?.();
   window.speechSynthesis?.cancel();
   window.clearInterval(fakeTimer);
   level = 0;
@@ -182,6 +243,16 @@ export async function speak(raw: string, profile: Profile): Promise<void> {
   const engine = profile.voice.engine === 'default' ? s.tts.engine : profile.voice.engine;
   const text = cleanForSpeech(raw);
   if (!text || engine === 'off') return;
+  if (engine === 'blips') {
+    stopSpeaking();
+    useApp.getState().setStatus({ speaking: true });
+    try {
+      await speakBlips(text, s.tts.volume);
+    } finally {
+      useApp.getState().setStatus({ speaking: false });
+    }
+    return;
+  }
   const lang = (s.stt.language || 'it').slice(0, 2);
   stopSpeaking();
   useApp.getState().setStatus({ speaking: true });

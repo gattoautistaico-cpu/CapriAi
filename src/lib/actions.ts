@@ -50,20 +50,56 @@ export async function listApps(): Promise<{ Name: string; AppID: string }[]> {
   }
 }
 
+/** Parole da ignorare nel nome dell'app ("apri l'app di Spotify" → "spotify"). */
+const FILLER = /\b(l|la|il|lo|le|gli|i|un|una|app|applicazione|programma|gioco|di|the|a|an|application|program|game|aplikacje|aplikacja|program|gre)\b/g;
+
 export async function openApp(name: string): Promise<string> {
-  const list = await listApps();
-  let best = 0;
-  let pick: { Name: string; AppID: string } | null = null;
-  for (const a of list) {
-    const s = score(a.Name, name);
-    if (s > best) {
-      best = s;
-      pick = a;
+  const q = norm(name).replace(FILLER, ' ').replace(/\s+/g, ' ').trim() || norm(name);
+  let list = await listApps();
+  const pickBest = () => {
+    let best = 0;
+    let pick: { Name: string; AppID: string } | null = null;
+    for (const a of list) {
+      const s = score(a.Name, q);
+      // a parità di punteggio preferisci il nome più corto ("Spotify" invece di "Spotify Uninstall")
+      if (s > best || (s === best && pick && s > 0 && a.Name.length < pick.Name.length)) {
+        best = s;
+        pick = a;
+      }
+    }
+    return best >= 40 ? pick : null;
+  };
+  let pick = pickBest();
+  if (!pick && appsCache && Date.now() - appsCache.t > 5000) {
+    // app installata da poco: rileggi l'elenco
+    appsCache = null;
+    list = await listApps();
+    pick = pickBest();
+  }
+  if (pick) {
+    try {
+      await invoke('open_app', { appId: pick.AppID });
+      return pick.Name;
+    } catch (e) {
+      log('warn', 'app', `${pick.Name}: ${String(e)}`);
     }
   }
-  if (!pick || best < 40) return '';
-  await invoke('open_app', { appId: pick.AppID });
-  return pick.Name;
+  // ultimo tentativo: nome semplice risolto da Windows (App Paths / PATH), es. "notepad", "chrome", "steam"
+  const raw = q.split(' ')[0];
+  if (raw && /^[a-z0-9._-]{2,40}$/.test(raw)) {
+    try {
+      await invoke('open_app', { appId: 'raw:' + raw });
+      return raw;
+    } catch {
+      /* non trovata */
+    }
+  }
+  return '';
+}
+
+/** Precarica l'elenco delle app all'avvio (Get-StartApps impiega 1-2 s la prima volta). */
+export function preloadApps() {
+  void listApps();
 }
 
 // ------------------------------------------------------------ ricerche

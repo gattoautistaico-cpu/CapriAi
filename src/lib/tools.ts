@@ -26,6 +26,7 @@ export async function autodetectTools(): Promise<void> {
     whisperModel:
       s.stt.whisperModel ||
       (await first([j('models', 'ggml-small.bin'), j('models', 'ggml-medium-q5_0.bin'), j('models', 'ggml-base.bin')])),
+    fastModel: s.stt.fastModel || (await first([j('models', 'ggml-base-q5_1.bin'), j('models', 'ggml-base.bin'), j('models', 'ggml-tiny.bin')])),
     piperExe: s.tts.piperExe || (await first([j('piper', 'piper.exe')])),
     piperModel:
       s.tts.piperModel || (await first([j('voices', 'it_IT-paola-medium.onnx'), j('voices', 'en_US-amy-medium.onnx')])),
@@ -33,12 +34,13 @@ export async function autodetectTools(): Promise<void> {
   const changed =
     found.whisperExe !== s.stt.whisperExe ||
     found.whisperModel !== s.stt.whisperModel ||
+    found.fastModel !== s.stt.fastModel ||
     found.piperExe !== s.tts.piperExe ||
     found.piperModel !== s.tts.piperModel;
   if (!changed) return;
   useApp.getState().setSettings((x) => ({
     ...x,
-    stt: { ...x.stt, whisperExe: found.whisperExe, whisperModel: found.whisperModel },
+    stt: { ...x.stt, whisperExe: found.whisperExe, whisperModel: found.whisperModel, fastModel: found.fastModel === found.whisperModel ? '' : found.fastModel },
     tts: { ...x.tts, piperExe: found.piperExe, piperModel: found.piperModel },
   }));
   log('ok', 'setup', `strumenti locali rilevati in ${dir}`);

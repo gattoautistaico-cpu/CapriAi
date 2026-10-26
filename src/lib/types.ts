@@ -23,6 +23,9 @@ export const SPRITE_STATES = [
   'smug',
   'sleep',
   'dormant',
+  'dj',
+  'search',
+  'clipped',
 ] as const;
 
 export interface Outfit {
@@ -43,7 +46,7 @@ export interface AvatarLayout {
 }
 
 export interface VoiceConfig {
-  engine: 'default' | 'piper' | 'webspeech' | 'elevenlabs' | 'off';
+  engine: 'default' | 'piper' | 'webspeech' | 'elevenlabs' | 'blips' | 'off';
   piperModel: string;
   piperSpeaker: number | null;
   lengthScale: number;
@@ -98,13 +101,23 @@ export interface Settings {
     autoStart: boolean;
     continuous: boolean;
     vadThreshold: number;
+    /** microfono silenziato dal menu */
+    muted: boolean;
+    /** silenzio che chiude una frase (ms): più basso = risposta più rapida */
+    silenceMs: number;
+    /** in ascolto passivo le frasi più lunghe di N s vengono scartate (chiacchiere) */
+    maxPassiveSec: number;
+    /** modello whisper piccolo per parola di attivazione e comandi rapidi (opzionale) */
+    fastModel: string;
   };
   tts: {
-    engine: 'piper' | 'webspeech' | 'elevenlabs' | 'off';
+    engine: 'piper' | 'webspeech' | 'elevenlabs' | 'blips' | 'off';
     piperExe: string;
     piperModel: string;
     elevenKey: string;
     volume: number;
+    /** voce "Undertale": un blip per lettera */
+    blips: { pitch: number; wave: 'square' | 'triangle' | 'sawtooth' | 'sine'; volume: number; variance: number };
   };
   vision: {
     enabled: boolean;
@@ -116,7 +129,7 @@ export interface Settings {
   hotkey: string;
   activeProfileId: string;
   ui: { showHud: boolean; balloonSec: number; userName: string; mode: 'classic' | 'capri'; streamVisible: boolean; lang: '' | 'it' | 'en' | 'pl' };
-  capri: { frameWidth: number; sleepSec: number; typeCps: number; glitch: boolean };
+  capri: { frameWidth: number; sleepSec: number; typeCps: number; glitch: boolean; dragMode: 'normal' | 'lightning'; clingy: boolean };
   music: {
     provider: 'auto' | 'swiftfree' | 'spotify';
     swiftfree: { baseUrl: string; token: string; exePath: string; autoLaunch: boolean };
@@ -135,11 +148,26 @@ export interface Settings {
   passive: { on: boolean; words: string; greeting: string };
   contacts: Contact[];
   clip: ClipSettings;
+  replay: ReplaySettings;
+  keys: { openClips: string; clip: string };
   lovense: LovenseSettings;
   firstRun: boolean;
 }
 
-export type ClipBackend = 'auto' | 'medal' | 'amd' | 'nvidia' | 'gamebar' | 'custom';
+export type ClipBackend = 'auto' | 'capri' | 'medal' | 'amd' | 'nvidia' | 'gamebar' | 'custom';
+
+/** Instant replay di Capri (ffmpeg): buffer circolare dello schermo, "clip that" salva gli ultimi N secondi. */
+export interface ReplaySettings {
+  enabled: boolean;
+  ffmpeg: string;
+  dir: string;
+  seconds: number;
+  fps: number;
+  /** '' = rilevato automaticamente (AMD/NVIDIA/Intel, poi CPU) */
+  encoder: string;
+  /** dispositivo audio DirectShow ('' = senza audio) */
+  audio: string;
+}
 
 export interface ClipSettings {
   enabled: boolean;

@@ -413,21 +413,24 @@ async fn list_apps() -> Result<String, String> {
 /// Apre un'app dal suo AppID (shell:AppsFolder), oppure un percorso .exe/.lnk.
 #[tauri::command]
 fn open_app(app_id: String) -> Result<(), String> {
-    if app_id.trim().is_empty() || app_id.contains('"') {
+    let id = app_id.trim();
+    if id.is_empty() || id.contains('"') {
         return Err("app non valida".into());
     }
-    let target = if app_id.to_ascii_lowercase().ends_with(".exe")
-        || app_id.to_ascii_lowercase().ends_with(".lnk")
+    let low = id.to_ascii_lowercase();
+    let target = if low.ends_with(".exe")
+        || low.ends_with(".lnk")
+        || low.contains(":\\")
+        || low.starts_with("shell:")
     {
-        app_id.clone()
+        id.to_string()
+    } else if id.starts_with("raw:") {
+        // nome semplice ("notepad", "chrome"): lo risolve Windows tramite App Paths / PATH
+        id[4..].to_string()
     } else {
-        format!("shell:AppsFolder\\{app_id}")
+        format!("shell:AppsFolder\\{id}")
     };
-    let mut cmd = Command::new("explorer.exe");
-    cmd.arg(&target);
-    hide_window(&mut cmd);
-    cmd.spawn().map_err(|e| e.to_string())?;
-    Ok(())
+    shell_open(&target)
 }
 
 #[cfg(windows)]
@@ -540,27 +543,89 @@ fn ocr_impl() -> Result<String, String> {
 /// Apre un URL o un URI (https://, spotify:) con l'app predefinita di Windows.
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
-    let ok = url.starts_with("https://")
-        || url.starts_with("http://127.0.0.1")
-        || url.starts_with("spotify:");
-    if !ok {
+    let l = url.to_ascii_lowercase();
+    let ok = [
+        "https://",
+        "http://127.0.0.1",
+        "http://localhost",
+        "spotify:",
+        "swiftfree:",
+        "tel:",
+        "whatsapp:",
+        "mailto:",
+        "steam:",
+        "discord:",
+        "ms-settings:",
+    ]
+    .iter()
+    .any(|p| l.starts_with(p));
+    if !ok || url.contains('"') {
         return Err("schema URL non consentito".into());
     }
+    shell_open(&url)
+}
+
+#[cfg(windows)]
+#[link(name = "shell32")]
+extern "system" {
+    fn ShellExecuteW(
+        hwnd: isize,
+        op: *const u16,
+        file: *const u16,
+        params: *const u16,
+        dir: *const u16,
+        show: i32,
+    ) -> isize;
+}
+
+fn wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// Apre URL, percorsi, AppID (shell:AppsFolder\...) o nomi registrati in "App Paths"
+/// con ShellExecute: niente problemi di virgolette/spazi/% come con rundll32 o explorer.
+fn shell_open(target: &str) -> Result<(), String> {
     #[cfg(windows)]
-    {
-        let mut cmd = Command::new("rundll32.exe");
-        cmd.arg("url.dll,FileProtocolHandler").arg(&url);
-        hide_window(&mut cmd);
-        cmd.spawn().map_err(|e| e.to_string())?;
+    unsafe {
+        let op = wide("open");
+        let f = wide(target);
+        let r = ShellExecuteW(
+            0,
+            op.as_ptr(),
+            f.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            1,
+        );
+        if r <= 32 {
+            return Err(format!("ShellExecute {r}: {target}"));
+        }
+        Ok(())
     }
     #[cfg(not(windows))]
     {
         Command::new("xdg-open")
-            .arg(&url)
+            .arg(target)
             .spawn()
             .map_err(|e| e.to_string())?;
+        Ok(())
     }
-    Ok(())
+}
+
+/// Crea una cartella (e le cartelle padre) se manca.
+#[tauri::command]
+fn ensure_dir(path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())
+}
+
+/// Apre una cartella (creandola se manca), es. la cartella dei clip.
+#[tauri::command]
+fn open_path(path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
+    }
+    shell_open(&path)
 }
 
 #[cfg(windows)]
@@ -771,7 +836,10 @@ async fn running_processes() -> Result<Vec<String>, String> {
 /// Scarica un file (solo voci Piper da Hugging Face) nel percorso indicato.
 #[tauri::command]
 async fn download_file(url: String, dest: String) -> Result<(), String> {
-    if !url.starts_with("https://huggingface.co/rhasspy/piper-voices/") {
+    if !url.starts_with("https://huggingface.co/rhasspy/piper-voices/")
+        && !url.starts_with("https://github.com/BtbN/FFmpeg-Builds/releases/")
+        && !url.starts_with("https://huggingface.co/ggerganov/whisper.cpp/")
+    {
         return Err("URL non consentito".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -793,6 +861,316 @@ async fn download_file(url: String, dest: String) -> Result<(), String> {
             return Err(String::from_utf8_lossy(&out.stderr).chars().take(300).collect());
         }
         std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------- finestre esterne (Clingy mode)
+
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Default, Clone, Copy)]
+struct WinRect {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+}
+
+#[cfg(windows)]
+#[link(name = "user32")]
+extern "system" {
+    fn IsWindow(hwnd: isize) -> i32;
+    fn IsIconic(hwnd: isize) -> i32;
+    fn IsWindowVisible(hwnd: isize) -> i32;
+    fn GetWindowRect(hwnd: isize, r: *mut WinRect) -> i32;
+    fn GetWindowThreadProcessId(hwnd: isize, pid: *mut u32) -> u32;
+}
+
+#[cfg(windows)]
+#[link(name = "dwmapi")]
+extern "system" {
+    fn DwmGetWindowAttribute(hwnd: isize, attr: u32, out: *mut WinRect, size: u32) -> i32;
+}
+
+#[derive(serde::Serialize)]
+struct ExtWindow {
+    hwnd: i64,
+    title: String,
+    /// rettangolo in coordinate CSS (logiche) dell'overlay
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
+
+#[cfg(windows)]
+fn ext_rect(win: &tauri::Window, hwnd: isize) -> Option<ExtWindow> {
+    unsafe {
+        if hwnd == 0 || IsWindow(hwnd) == 0 || IsIconic(hwnd) != 0 || IsWindowVisible(hwnd) == 0 {
+            return None;
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == std::process::id() {
+            return None;
+        }
+        let mut r = WinRect::default();
+        // DWMWA_EXTENDED_FRAME_BOUNDS = 9: bordi visibili, senza l'ombra invisibile di Windows 10/11
+        if DwmGetWindowAttribute(hwnd, 9, &mut r, std::mem::size_of::<WinRect>() as u32) != 0 {
+            GetWindowRect(hwnd, &mut r);
+        }
+        let sf = win.scale_factor().unwrap_or(1.0);
+        let (ox, oy) = win.outer_position().map(|p| (p.x, p.y)).unwrap_or((0, 0));
+        let mut buf = [0u16; 256];
+        let n = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        Some(ExtWindow {
+            hwnd: hwnd as i64,
+            title: if n > 0 {
+                String::from_utf16_lossy(&buf[..n as usize])
+            } else {
+                String::new()
+            },
+            x: (r.left - ox) as f64 / sf,
+            y: (r.top - oy) as f64 / sf,
+            w: (r.right - r.left) as f64 / sf,
+            h: (r.bottom - r.top) as f64 / sf,
+        })
+    }
+}
+
+/// Finestra in primo piano (se non è Capri stessa).
+#[tauri::command]
+fn foreground_window(window: tauri::Window) -> Option<ExtWindow> {
+    #[cfg(windows)]
+    unsafe {
+        return ext_rect(&window, GetForegroundWindow());
+    }
+    #[allow(unreachable_code)]
+    {
+        let _ = window;
+        None
+    }
+}
+
+/// Posizione attuale di una finestra (null se chiusa o ridotta a icona).
+#[tauri::command]
+fn window_rect(window: tauri::Window, hwnd: i64) -> Option<ExtWindow> {
+    #[cfg(windows)]
+    {
+        return ext_rect(&window, hwnd as isize);
+    }
+    #[allow(unreachable_code)]
+    {
+        let _ = (window, hwnd);
+        None
+    }
+}
+
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
+// ---------------------------------------------------------------- instant replay (ffmpeg)
+
+/// Prova gli encoder H.264 (hardware prima) e ritorna il primo che funziona davvero.
+#[tauri::command]
+async fn replay_probe(ffmpeg: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        for enc in ["h264_amf", "h264_nvenc", "h264_qsv", "libx264"] {
+            let mut cmd = Command::new(&ffmpeg);
+            cmd.args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=320x240:r=30",
+                "-frames:v",
+                "5",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:v",
+                enc,
+                "-f",
+                "null",
+                "-",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+            hide_window(&mut cmd);
+            if let Ok(st) = cmd.status() {
+                if st.success() {
+                    return Ok(enc.to_string());
+                }
+            }
+        }
+        Err("ffmpeg non trovato o nessun encoder H.264 funzionante".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Dispositivi audio DirectShow (per registrare anche l'audio, es. "Stereo Mix").
+#[tauri::command]
+async fn replay_audio_devices(ffmpeg: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = Command::new(&ffmpeg);
+        cmd.args([
+            "-hide_banner",
+            "-list_devices",
+            "true",
+            "-f",
+            "dshow",
+            "-i",
+            "dummy",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+        hide_window(&mut cmd);
+        let out = cmd.output().map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&out.stderr);
+        Ok(text
+            .lines()
+            .filter(|l| l.contains("(audio)"))
+            .filter_map(|l| l.split('"').nth(1).map(|x| x.to_string()))
+            .collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Salva gli ultimi `seconds` secondi del buffer (segmenti .ts) in un .mp4.
+#[tauri::command]
+async fn replay_save(
+    ffmpeg: String,
+    buf_dir: String,
+    out_file: String,
+    seconds: u32,
+    seg_sec: u32,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut segs: Vec<(SystemTime, PathBuf)> = std::fs::read_dir(&buf_dir)
+            .map_err(|e| format!("buffer replay: {e}"))?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().map(|x| x == "ts").unwrap_or(false))
+            .filter_map(|p| {
+                std::fs::metadata(&p)
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .map(|t| (t, p))
+            })
+            .collect();
+        if segs.is_empty() {
+            return Err("buffer vuoto: l'instant replay è attivo da pochi secondi?".into());
+        }
+        segs.sort_by_key(|(t, _)| *t);
+        let need = (seconds / seg_sec.max(1) + 1) as usize;
+        let take: Vec<&PathBuf> = segs
+            .iter()
+            .rev()
+            .take(need)
+            .map(|(_, p)| p)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        if let Some(dir) = PathBuf::from(&out_file).parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        let list = PathBuf::from(&buf_dir).join("concat.txt");
+        let body: String = take
+            .iter()
+            .map(|p| {
+                format!(
+                    "file '{}'\n",
+                    p.to_string_lossy()
+                        .replace('\\', "/")
+                        .replace('\'', "'\\''")
+                )
+            })
+            .collect();
+        std::fs::write(&list, body).map_err(|e| e.to_string())?;
+        let mut cmd = Command::new(&ffmpeg);
+        cmd.args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+        ])
+        .arg(&list)
+        .args(["-c", "copy", "-movflags", "+faststart"])
+        .arg(&out_file)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+        hide_window(&mut cmd);
+        let out = cmd.output().map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr)
+                .chars()
+                .take(300)
+                .collect());
+        }
+        Ok(out_file)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Cartella predefinita dei clip: Video\Capri Clips.
+#[tauri::command]
+fn default_clips_dir() -> String {
+    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| ".".into());
+    PathBuf::from(home)
+        .join("Videos")
+        .join("Capri Clips")
+        .to_string_lossy()
+        .to_string()
+}
+
+/// Estrae uno zip (ffmpeg scaricato) con PowerShell.
+#[tauri::command]
+async fn unzip_file(zip: String, dest: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let script = format!(
+            "Expand-Archive -Force -LiteralPath '{}' -DestinationPath '{}'",
+            zip.replace('\'', "''"),
+            dest.replace('\'', "''")
+        );
+        let mut cmd = Command::new("powershell.exe");
+        cmd.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+        hide_window(&mut cmd);
+        let out = cmd.output().map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr)
+                .chars()
+                .take(300)
+                .collect());
+        }
+        let _ = std::fs::remove_file(&zip);
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -902,6 +1280,16 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             set_tray_lang,
+            open_path,
+            ensure_dir,
+            foreground_window,
+            window_rect,
+            quit_app,
+            replay_probe,
+            replay_audio_devices,
+            replay_save,
+            default_clips_dir,
+            unzip_file,
             send_hotkey,
             running_processes,
             download_file,

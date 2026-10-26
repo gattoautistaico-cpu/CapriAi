@@ -185,6 +185,39 @@ Build automatica: fai push su GitHub e il workflow `.github/workflows/build-wind
 - Hotkey push-to-talk predefinita: `Ctrl+Shift+W`, modificabile nella scheda Ascolto.
 - Dal tray, "Blocca/Sblocca interazione" rende tutta la finestra cliccabile. Serve se il click-through dà problemi.
 
+## Novità 0.6.0
+
+- **Menu CAPRI** (tasto destro su Capri), con lo stesso stile del video:
+  - microfono on/muted;
+  - voce ON / BLIPS / OFF;
+  - dimentica la conversazione, ricarica la personalità;
+  - instant replay, apri cartella dei clip (`Ctrl+Alt+C`), scorciatoie;
+  - clingy mode, drag mode;
+  - impostazioni, esci.
+- **Drag mode LIGHTNING**: trascini un lazo a fulmine rosso dalla finestra al punto voluto e Capri ci "salta" con un glitch.
+- **Clingy mode**: Capri si attacca alla finestra in primo piano (lampo rosso) e la segue quando la sposti.
+- **Modalità rapide**, eseguite senza AI e quindi con latenza minima:
+  - "DJ mode": la frase successiva è un brano da mettere;
+  - "search mode": la frase successiva è una ricerca su YouTube (oppure "google …");
+  - "cancel" per tornare alla normalità.
+  - Etichette `CAPRI // DJ MODE`, `SEARCH MODE` (con barra di ricerca), `REWIRING` nei cambi di modalità.
+- **Instant replay di Capri** con ffmpeg:
+  - "clip that" salva gli ultimi 30 s in `Video\Capri Clips`;
+  - nel terminale compare `// saved Capri clip …mp4`, con l'animazione dell'occhio e `// CLIPPED 30s`;
+  - encoder hardware AMD/NVIDIA/Intel se disponibile;
+  - ffmpeg si scarica da **Impostazioni → Clip**.
+- **Voce "Undertale"**: un blip per lettera al posto della voce, sincronizzato con il testo (Impostazioni → Voce oppure menu → VOICE).
+- **Stile più fedele al video**: TALKING rosso, THINKING giallo con angoli, DJ/SEARCH/CLIPPED verdi, terminale con angolo tagliato, righe di sistema `// …`.
+- **Correzioni**:
+  - apertura delle app e ricerche Google ora passano da `ShellExecute`, così niente più problemi con spazi, `&` o `%`;
+  - le app non trovate vengono cercate anche per nome di sistema ("notepad", "steam").
+- **Latenza delle trascrizioni**:
+  - una frase finisce dopo 550 ms di silenzio (prima erano 900 ms);
+  - whisper usa la decodifica greedy, senza ripetizioni a temperature più alte, con un suggerimento con il nome e i comandi;
+  - in ascolto passivo le frasi lunghe (chiacchiere) vengono saltate e la coda tiene solo la frase più recente;
+  - comandi rapidi senza AI;
+  - modello veloce opzionale (`ggml-base-q5_1`, scaricabile da Impostazioni → Ascolto) per Hey Capri e "clip that".
+
 ## Novità 0.5.1
 
 - **Capri si vede in Discord, OBS e nelle registrazioni.** Prima la finestra era esclusa da ogni cattura dello schermo.

@@ -96,11 +96,39 @@ export function cleanTranscript(t: string): string {
   return s;
 }
 
-const whisperUrl = () => `http://127.0.0.1:${useApp.getState().settings.stt.port}`;
+const whisperUrl = (fast = false) => `http://127.0.0.1:${useApp.getState().settings.stt.port + (fast ? 1 : 0)}`;
+let fastReady = false;
+
+/** Argomenti di whisper-server ottimizzati per la latenza (greedy, niente fallback a temperature alte). */
+function serverArgs(model: string, port: number): string[] {
+  const s = useApp.getState().settings.stt;
+  return ['-m', model, '--host', '127.0.0.1', '--port', String(port), '-t', String(s.threads), '-l', s.language || 'auto', '-bo', '1', '-bs', '1', '-nf'];
+}
+
+/** Secondo whisper-server con un modello piccolo, solo per parola di attivazione e comandi rapidi. */
+async function ensureFastWhisper(): Promise<boolean> {
+  const s = useApp.getState().settings.stt;
+  if (!s.fastModel || !s.whisperExe) return false;
+  if (fastReady || (await pingWhisper(true))) return (fastReady = true);
+  try {
+    await invoke('start_service', { tag: 'whisper-fast', exe: s.whisperExe, args: serverArgs(s.fastModel, s.port + 1) });
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 400));
+      if (await pingWhisper(true)) {
+        log('ok', 'stt', `whisper veloce pronto su :${s.port + 1}`);
+        return (fastReady = true);
+      }
+    }
+  } catch (e) {
+    log('warn', 'stt', `whisper veloce: ${String(e)}`);
+  }
+  return false;
+}
 
 export async function ensureWhisper(): Promise<boolean> {
   const s = useApp.getState().settings.stt;
   if (s.mode !== 'whisper') return false;
+  void ensureFastWhisper();
   if (await pingWhisper()) {
     useApp.getState().setStatus({ sttReady: true });
     return true;
@@ -113,7 +141,7 @@ export async function ensureWhisper(): Promise<boolean> {
     await invoke('start_service', {
       tag: 'whisper',
       exe: s.whisperExe,
-      args: ['-m', s.whisperModel, '--host', '127.0.0.1', '--port', String(s.port), '-t', String(s.threads), '-l', s.language || 'auto'],
+      args: serverArgs(s.whisperModel, s.port),
     });
     for (let i = 0; i < 40; i++) {
       await new Promise((r) => setTimeout(r, 500));
@@ -131,22 +159,38 @@ export async function ensureWhisper(): Promise<boolean> {
   return false;
 }
 
-async function pingWhisper(): Promise<boolean> {
+async function pingWhisper(fast = false): Promise<boolean> {
   try {
-    const res = await tfetch(whisperUrl(), { method: 'GET', connectTimeout: 800 });
+    const res = await tfetch(whisperUrl(fast), { method: 'GET', connectTimeout: 800 });
     return res.status < 500;
   } catch {
     return false;
   }
 }
 
-async function whisperTranscribe(wav: Uint8Array): Promise<string> {
+/** Parole che whisper deve riconoscere bene (nome, parola di attivazione, comandi rapidi). */
+function hintPrompt(): string {
+  const st = useApp.getState();
+  const name = st.profiles.find((p) => p.id === st.settings.activeProfileId)?.name ?? 'Capri';
+  return `${name}, ${st.settings.passive.words || 'hey capri'}, clip that, clippa, DJ mode, search mode, YouTube, Google, Spotify.`;
+}
+
+async function whisperTranscribe(wav: Uint8Array, fast = false): Promise<string> {
   const s = useApp.getState().settings.stt;
   const { body, contentType } = multipart(
-    { response_format: 'json', temperature: '0.0', language: s.language || 'auto' },
+    {
+      response_format: 'json',
+      temperature: '0.0',
+      temperature_inc: '0.0',
+      best_of: '1',
+      beam_size: '1',
+      no_timestamps: 'true',
+      prompt: hintPrompt(),
+      language: s.language || 'auto',
+    },
     { field: 'file', name: 'audio.wav', data: wav, type: 'audio/wav' },
   );
-  const res = await tfetch(`${whisperUrl()}/inference`, {
+  const res = await tfetch(`${whisperUrl(fast)}/inference`, {
     method: 'POST',
     headers: { 'Content-Type': contentType },
     body,
@@ -173,13 +217,15 @@ async function cloudTranscribe(wav: Uint8Array): Promise<string> {
   return r.text;
 }
 
-export async function transcribe(wav: Uint8Array): Promise<string> {
+export async function transcribe(wav: Uint8Array, opts: { fast?: boolean } = {}): Promise<string> {
   const mode = useApp.getState().settings.stt.mode;
   if (mode === 'off') return '';
   if (mode === 'whisper') {
     try {
-      const t = cleanTranscript(await whisperTranscribe(wav));
-      log('ok', 'stt', `whisper: "${t.slice(0, 60)}"`);
+      const fast = !!opts.fast && fastReady;
+      const t0 = performance.now();
+      const t = cleanTranscript(await whisperTranscribe(wav, fast));
+      log('ok', 'stt', `whisper${fast ? ' veloce' : ''} ${Math.round(performance.now() - t0)} ms: "${t.slice(0, 60)}"`);
       return t;
     } catch (e) {
       log('warn', 'stt', `whisper fallito (${String(e)}) → cloud`);
@@ -243,12 +289,12 @@ class Mic {
         if (!quiet) this.heard = true;
         this.silentMs = quiet ? this.silentMs + frameMs : 0;
         // one-shot: aspetta che l'utente inizi a parlare (max 7 s) prima di chiudere al silenzio
-        if (this.heard ? this.silentMs > 900 : this.silentMs > 7000) this.finish();
+        if (this.heard ? this.silentMs > Math.max(250, st.settings.stt.silenceMs || 550) : this.silentMs > 7000) this.finish();
         if (this.chunks.length * frameMs > 30_000) this.finish();
       }
       return;
     }
-    if (!this.continuous || st.status.speaking || st.status.thinking) return;
+    if (!this.continuous || st.status.speaking || st.settings.stt.muted) return;
     this.preroll.push(copy);
     if (this.preroll.length > 3) this.preroll.shift();
     this.loudFrames = rms > st.settings.stt.vadThreshold ? this.loudFrames + 1 : 0;

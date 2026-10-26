@@ -6,11 +6,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { norm } from './actions';
 import { T } from './i18n';
+import { replayRunning, saveReplay } from './replay';
 import { log, useApp } from './store';
 import type { ClipBackend } from './types';
 
 /** Processi che indicano il software di clip attivo (nomi di tasklist, minuscoli). */
-const PROCS: Record<Exclude<ClipBackend, 'auto' | 'gamebar' | 'custom'>, string[]> = {
+const PROCS: Record<Exclude<ClipBackend, 'auto' | 'capri' | 'gamebar' | 'custom'>, string[]> = {
   medal: ['medal.exe', 'medalencoder.exe'],
   amd: ['radeonsoftware.exe', 'amdrsserv.exe', 'amdrssrcext.exe'],
   nvidia: ['nvidia share.exe', 'nvidia overlay.exe', 'nvidia app.exe'],
@@ -32,6 +33,7 @@ async function processes(): Promise<string[]> {
 export async function detectClipBackends(): Promise<ClipBackend[]> {
   const ps = await processes();
   const out: ClipBackend[] = [];
+  if (await replayRunning()) out.push('capri');
   for (const k of ['medal', 'amd', 'nvidia'] as const) if (PROCS[k].some((p) => ps.includes(p))) out.push(k);
   out.push('gamebar');
   return out;
@@ -39,18 +41,29 @@ export async function detectClipBackends(): Promise<ClipBackend[]> {
 
 let lastClip = 0;
 
-/** Salva il clip. Ritorna il backend usato. */
-export async function clipThat(): Promise<string> {
+export interface ClipResult {
+  backend: string;
+  /** file salvato (solo instant replay di Capri) */
+  file?: string;
+}
+
+/** Salva il clip con l'instant replay di Capri o con il tasto del programma di registrazione. */
+export async function clipThat(): Promise<ClipResult> {
   const c = useApp.getState().settings.clip;
-  if (Date.now() - lastClip < 3000) return 'skip'; // stessa frase trascritta due volte
+  if (Date.now() - lastClip < 3000) return { backend: 'skip' }; // stessa frase trascritta due volte
   lastClip = Date.now();
   const backend = c.backend === 'auto' ? (await detectClipBackends())[0] : c.backend;
+  if (backend === 'capri') {
+    const file = await saveReplay();
+    if (c.sound) beep();
+    return { backend, file };
+  }
   const combo = c.hotkeys[backend as keyof typeof c.hotkeys] || '';
   if (!combo) throw new Error(T('nessun tasto rapido impostato per') + ' ' + backend);
   await invoke('send_hotkey', { combo });
   log('ok', 'clip', `${backend}: ${combo}`);
   if (c.sound) beep();
-  return backend;
+  return { backend };
 }
 
 /** true se la frase trascritta è un comando di clip. */

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { clipThat, detectClipBackends } from '../lib/clip';
+import { downloadFfmpeg, findFfmpeg, openClipsFolder } from '../lib/replay';
 import { FEATURES, PRESETS, getToys, normalizeUrl, preset, runPattern, stopToys, type Toy } from '../lib/lovense';
 import { uid, useApp } from '../lib/store';
 import type { ClipBackend, LovensePattern, Settings as S } from '../lib/types';
@@ -17,7 +19,8 @@ const errMsg = (e: unknown) => String(e instanceof Error ? e.message : e);
 // ================================================================ CLIP
 
 const BACKENDS: { value: ClipBackend; label: string }[] = [
-  { value: 'auto', label: 'Automatico (Medal → AMD → NVIDIA → Game Bar)' },
+  { value: 'auto', label: 'Automatico (Capri → Medal → AMD → NVIDIA → Game Bar)' },
+  { value: 'capri', label: 'Instant replay di Capri (ffmpeg)' },
   { value: 'medal', label: 'Medal' },
   { value: 'amd', label: 'AMD Adrenalin (Instant Replay)' },
   { value: 'nvidia', label: 'NVIDIA (ShadowPlay / NVIDIA App)' },
@@ -47,6 +50,7 @@ export function ClipTab() {
         />
         <Toggle label="Bip di conferma" on={c.sound} onChange={(v) => patch('clip', { sound: v })} />
       </section>
+      <ReplaySection />
       <section className="flex flex-col gap-3">
         <H n="21">Software di registrazione</H>
         <Select label="Usa" value={c.backend} onChange={(v) => patch('clip', { backend: v as ClipBackend })} options={BACKENDS} />
@@ -83,7 +87,8 @@ export function ClipTab() {
             variant="primary"
             onClick={async () => {
               try {
-                setMsg('OK: ' + (await clipThat()));
+                const r = await clipThat();
+                setMsg('OK: ' + r.backend + (r.file ? ' → ' + r.file : ''));
               } catch (e) {
                 setMsg(errMsg(e));
               }
@@ -316,5 +321,90 @@ export function LovenseTab() {
         <Field label="Durata per mood (s)" type="number" value={l.moodSec} onChange={(v) => patch('lovense', { moodSec: Math.max(1, Number(v) || 6) })} />
       </section>
     </div>
+  );
+}
+
+// ================================================================ INSTANT REPLAY + SCORCIATOIE
+
+function ReplaySection() {
+  const settings = useApp((x) => x.settings);
+  const setSettings = useApp((x) => x.setSettings);
+  const r = settings.replay;
+  const k = settings.keys;
+  const setR = (p: Partial<S['replay']>) => setSettings((x) => ({ ...x, replay: { ...x.replay, ...p } }));
+  const setK = (p: Partial<S['keys']>) => setSettings((x) => ({ ...x, keys: { ...x.keys, ...p } }));
+  const [ff, setFf] = useState<string | null>(null);
+  const [devices, setDevices] = useState<string[]>([]);
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void findFfmpeg().then(async (p) => {
+      setFf(p);
+      if (p) setDevices(await invoke<string[]>('replay_audio_devices', { ffmpeg: p }).catch(() => []));
+    });
+  }, [r.ffmpeg]);
+  return (
+    <section className="flex flex-col gap-3">
+      <H n="20b">Instant replay di Capri</H>
+      <Toggle
+        label="Instant replay"
+        hint="Registra lo schermo di continuo in un buffer: “clip that” salva gli ultimi secondi in un .mp4 (come nel menu CAPRI)"
+        on={r.enabled}
+        onChange={(v) => setR({ enabled: v })}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip tone={ff ? 'ok' : 'warn'}>{ff ? `ffmpeg: ${ff}` : 'ffmpeg non trovato'}</Chip>
+        <Btn
+          variant="ghost"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setMsg('');
+            try {
+              setFf(await downloadFfmpeg());
+              setMsg('OK');
+            } catch (e) {
+              setMsg(errMsg(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? '…' : '↓ Scarica ffmpeg (~150 MB)'}
+        </Btn>
+        {msg && <span className="font-mono text-[12px] text-cyan">{msg}</span>}
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="Secondi salvati" type="number" value={r.seconds} onChange={(v) => setR({ seconds: Math.max(5, Math.min(300, Number(v) || 30)) })} />
+        <Field label="FPS" type="number" value={r.fps} onChange={(v) => setR({ fps: Math.max(10, Math.min(60, Number(v) || 30)) })} />
+        <Select
+          label="Encoder"
+          value={r.encoder}
+          onChange={(v) => setR({ encoder: v })}
+          options={[
+            { value: '', label: 'Automatico (GPU se c’è)' },
+            { value: 'h264_amf', label: 'AMD AMF' },
+            { value: 'h264_nvenc', label: 'NVIDIA NVENC' },
+            { value: 'h264_qsv', label: 'Intel QSV' },
+            { value: 'libx264', label: 'CPU (x264)' },
+          ]}
+        />
+      </div>
+      <Select label="Audio nel clip" value={r.audio} onChange={(v) => setR({ audio: v })} options={[{ value: '', label: 'Nessuno' }, ...devices.map((d) => ({ value: d, label: d }))]} />
+      <Field label="Cartella dei clip (vuota = Video\Capri Clips)" value={r.dir} onChange={(v) => setR({ dir: v })} />
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Scorciatoia: apri cartella clip" value={k.openClips} onChange={(v) => setK({ openClips: v })} placeholder="CommandOrControl+Alt+C" />
+        <Field label="Scorciatoia: clip immediato" value={k.clip} onChange={(v) => setK({ clip: v })} placeholder="CommandOrControl+Alt+X" />
+      </div>
+      <p className="m-0 text-[14px] text-muted">
+        Per l’audio di gioco serve un dispositivo di registrazione del “mix stereo” (Impostazioni audio di Windows → Stereo Mix) oppure un cavo audio virtuale. Le
+        modifiche si applicano spegnendo e riaccendendo l’instant replay.
+      </p>
+      <div>
+        <Btn variant="cyan" onClick={() => void openClipsFolder().catch((e) => setMsg(errMsg(e)))}>
+          Apri cartella clip
+        </Btn>
+      </div>
+    </section>
   );
 }

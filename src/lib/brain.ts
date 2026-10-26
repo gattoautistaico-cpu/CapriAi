@@ -12,6 +12,7 @@ import type { ChatMsg } from './types';
 import { T } from './i18n';
 import { withOverlayHidden } from './capture';
 import { clipThat } from './clip';
+import { fastCommand } from './commands';
 import { moodToy, parseToyTags, runToyCmds, toyPrompt, type ToyCmd } from './lovense';
 
 const history: ChatMsg[] = [];
@@ -139,7 +140,7 @@ async function runActions(acts: Action[]) {
         if (!st.settings.tools.apps) continue;
         const got = await openApp(a.v);
         log(got ? 'ok' : 'warn', 'azioni', got ? `aperta ${got}` : `app non trovata: ${a.v}`);
-        if (!got) st.setExchange({ np: `// non trovo l'app "${a.v}"` });
+        if (!got) st.setExchange({ sys: `non trovo l'app "${a.v}"` });
       } else if (a.kind === 'youtube') {
         await youtube(a.v);
         log('ok', 'azioni', `YouTube: ${a.v}`);
@@ -164,7 +165,7 @@ async function runActions(acts: Action[]) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log('warn', 'azioni', msg);
-      useApp.getState().setExchange({ np: `// ${msg}` });
+      useApp.getState().setExchange({ sys: msg });
     }
   }
 }
@@ -186,10 +187,17 @@ async function deliver(raw: string, meta: string) {
     log('info', 'memoria', `ricordato: ${f}`);
   });
   if (st.settings.tools.on && r.acts.length) {
-    if (!useApp.getState().exchange.np) st.setExchange({ np: r.acts.map((a) => `${a.kind}: ${a.to ? a.to + ' · ' : ''}${a.v}`).join(' · ') });
+    st.setExchange({ sys: r.acts.map((a) => `${a.kind}: ${a.to ? a.to + ' · ' : ''}${a.v}`).join(' · ') });
     void runActions(r.acts);
   }
-  if (r.clip) void clipThat().catch((e) => log('error', 'clip', String(e instanceof Error ? e.message : e)));
+  if (r.clip)
+    void clipThat()
+      .then((c) => {
+        if (c.backend === 'skip') return;
+        useApp.getState().setCapriFx('clipped');
+        useApp.getState().setExchange({ sys: c.file ? `saved ${c.file}` : `clip → ${c.backend}` });
+      })
+      .catch((e) => log('error', 'clip', String(e instanceof Error ? e.message : e)));
   if (r.toys.length) void runToyCmds(r.toys);
   else void moodToy(r.mood);
   const text = r.text || (r.play ? `${T('Metto su')} ${r.play}.` : r.acts.length || r.clip || r.toys.length ? T('Fatto, choom.') : '…');
@@ -206,18 +214,20 @@ async function deliver(raw: string, meta: string) {
 /** Saluto della modalità passiva ("Hey Capri"). */
 export function greet(text: string) {
   const st = useApp.getState();
-  st.setExchange({ user: '', np: '' });
+  st.setExchange({ user: '', np: '', sys: '' });
   st.showBalloon(text, 'happy');
   const prof = activeProfile();
   if (prof) void speak(text, prof).catch(() => undefined);
 }
 
-export function ask(userText: string, opts: { voice?: boolean; image?: string; src?: string } = {}): Promise<void> {
+export async function ask(userText: string, opts: { voice?: boolean; image?: string; src?: string } = {}): Promise<void> {
   const text = (userText ?? '').trim();
-  if (!text && !opts.image) return Promise.resolve();
+  if (!text && !opts.image) return;
   const st = useApp.getState();
   st.pushChat({ role: 'user', text: text || '[immagine]', ts: Date.now(), meta: opts.voice ? 'voce' : undefined });
-  st.setExchange({ user: text || '[immagine]', np: '' });
+  // comandi rapidi (clip, DJ/search mode, musica, apri app…): subito, senza AI e senza coda
+  if (!opts.image && (await fastCommand(text))) return;
+  st.setExchange({ user: text || '[immagine]', np: '', sys: '' });
   lastSrc = opts.src ?? '';
   return serial(async () => {
     try {
@@ -231,7 +241,7 @@ export function ask(userText: string, opts: { voice?: boolean; image?: string; s
       // domanda sullo schermo: leggi subito titolo + testo (OCR) + immagine
       let screenCtx: Awaited<ReturnType<typeof readScreen>> | null = null;
       if (!opts.image && tools.on && tools.screen && (SCREEN_RE.test(text) || /\b(guarda|vedi|cosa sto facendo|look at)\b/i.test(text))) {
-        st.setExchange({ np: '// lettura schermo' });
+        st.setExchange({ sys: 'lettura schermo' });
         screenCtx = await readScreen(true);
       }
       let task: 'chat' | 'vision' = opts.image ? 'vision' : 'chat';
@@ -251,12 +261,12 @@ export function ask(userText: string, opts: { voice?: boolean; image?: string; s
         let results = '';
         let img = '';
         if (first.web && tools.web) {
-          st.setExchange({ np: `// web: ${first.web}` });
+          st.setExchange({ sys: `web: ${first.web}` });
           const res = await webSearch(first.web);
           results += `[RISULTATI WEB per "${first.web}"]\n` + (res.length ? res.map((x, i) => `${i + 1}. ${x.title} — ${x.snippet} (${x.url})`).join('\n') : 'nessun risultato');
         }
         if (first.screen && tools.screen) {
-          st.setExchange({ np: '// lettura schermo' });
+          st.setExchange({ sys: 'lettura schermo' });
           const sc = await readScreen(true);
           results += `\n[SCHERMO — finestra: ${sc.title || 'sconosciuta'}]\n${sc.text || '(nessun testo letto)'}`;
           img = sc.image;
@@ -367,7 +377,7 @@ export function visionTick(force = false): Promise<void> {
         { maxTokens: 120 },
       );
       if (!/^\s*(\[mood:[a-z]+\]\s*)?SKIP\b/i.test(r.text)) {
-        useApp.getState().setExchange({ user: '', np: '' });
+        useApp.getState().setExchange({ user: '', np: '', sys: '' });
         await deliver(r.text, `schermo · ${r.provider}`);
       }
     } catch (e) {
