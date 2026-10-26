@@ -5,6 +5,7 @@ import './index.css';
 import { loadPersisted } from './lib/store';
 import { invoke } from '@tauri-apps/api/core';
 import I18N from './lib/i18n';
+import { applyStreamVisibility } from './lib/capture';
 import { useApp } from './lib/store';
 
 // niente menu contestuale del browser sull'overlay
@@ -14,6 +15,10 @@ loadPersisted().finally(() => {
   I18N.set(useApp.getState().settings.ui.lang || I18N.detect());
   I18N.observe(document.body);
   invoke('set_tray_lang', { lang: I18N.lang }).catch(() => undefined);
+  applyStreamVisibility();
+  useApp.subscribe((s, p) => {
+    if (s.settings.ui.streamVisible !== p.settings.ui.streamVisible) applyStreamVisibility();
+  });
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <App />

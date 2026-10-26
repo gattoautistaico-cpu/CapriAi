@@ -3,6 +3,7 @@
  * aprire app, ricerca YouTube/Google, ricerca web con risposta, lettura schermo,
  * chiamate (tel: -> Collegamento al telefono) e WhatsApp.
  */
+import { withOverlayHidden } from './capture';
 import { invoke } from '@tauri-apps/api/core';
 import { httpSafe } from './router';
 import { log, useApp } from './store';
@@ -144,7 +145,7 @@ export interface ScreenRead {
 /** Titolo finestra + testo OCR + screenshot (per la visione). Non lancia mai. */
 export async function readScreen(withImage: boolean): Promise<ScreenRead> {
   const s = useApp.getState().settings;
-  const [text, image] = await Promise.all([
+  const [text, image] = await withOverlayHidden(() => Promise.all([
     invoke<string>('ocr_screen').catch((e) => {
       log('warn', 'schermo', `OCR: ${String(e).slice(0, 120)}`);
       return '';
@@ -154,7 +155,7 @@ export async function readScreen(withImage: boolean): Promise<ScreenRead> {
           .then((b) => `data:image/jpeg;base64,${b}`)
           .catch(() => '')
       : Promise.resolve(''),
-  ]);
+  ]));
   log('info', 'schermo', `letto: "${lastTitle}" · ${text.length} caratteri${image ? ' + immagine' : ''}`);
   return { title: lastTitle, text, image };
 }

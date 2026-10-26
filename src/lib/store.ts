@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   vision: { enabled: false, intervalSec: 45, maxWidth: 1024, react: true, minReactGapSec: 120 },
   hotkey: 'CommandOrControl+Shift+W',
   activeProfileId: '',
-  ui: { showHud: false, balloonSec: 9, userName: '', mode: 'capri', lang: '' },
+  ui: { showHud: false, balloonSec: 9, userName: '', mode: 'capri', streamVisible: true, lang: '' },
   capri: { frameWidth: 380, sleepSec: 90, typeCps: 32, glitch: true },
   music: {
     provider: 'auto',

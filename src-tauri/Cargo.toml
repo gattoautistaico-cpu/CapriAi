@@ -1,6 +1,6 @@
 [package]
 name = "cyber-ai"
-version = "0.5.0"
+version = "0.5.1"
 description = "Cyber AI - waifu AI desktop overlay"
 edition = "2021"
 

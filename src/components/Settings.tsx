@@ -167,6 +167,12 @@ function ModeTab() {
           <Field label="Velocità testo (car/s)" type="number" value={s.capri.typeCps} onChange={(v) => patch('capri', { typeCps: Math.max(5, Number(v) || 32) })} />
         </div>
         <Toggle label="Effetti glitch" hint="Transizioni e disturbi RGB" on={s.capri.glitch} onChange={(v) => patch('capri', { glitch: v })} />
+        <Toggle
+          label="Visibile in Discord / OBS"
+          hint="Capri compare nella condivisione schermo e nelle registrazioni. Dai suoi screenshot resta comunque esclusa."
+          on={s.ui.streamVisible}
+          onChange={(v) => patch('ui', { streamVisible: v })}
+        />
         <p className="m-0 text-[14px] text-muted">
           Sprite consigliati: <b>dormant</b> (sigillo piccolo, senza sfondo), <b>idle</b>, <b>listen</b>, <b>think</b>, <b>talk</b> e i mood. In questa modalità puoi
           importare anche clip video <b>webm/mp4</b> in loop. Click sul sigillo = parla, tasto destro = impostazioni, rotella sulla finestra = dimensione,

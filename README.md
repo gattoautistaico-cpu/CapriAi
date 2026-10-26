@@ -185,6 +185,12 @@ Build automatica: fai push su GitHub e il workflow `.github/workflows/build-wind
 - Hotkey push-to-talk predefinita: `Ctrl+Shift+W`, modificabile nella scheda Ascolto.
 - Dal tray, "Blocca/Sblocca interazione" rende tutta la finestra cliccabile. Serve se il click-through dà problemi.
 
+## Novità 0.5.1
+
+- **Capri si vede in Discord, OBS e nelle registrazioni.** Prima la finestra era esclusa da ogni cattura dello schermo.
+  - La regola l'opzione **Impostazioni → Modalità → Visibile in Discord / OBS**, attiva di default.
+  - Dai suoi screenshot per la visione e l'OCR resta comunque esclusa, solo per l'istante dello scatto.
+
 ## Novità 0.5.0
 
 - **Riquadro in alto a destra rimosso**: la barra di stato non c'è più.

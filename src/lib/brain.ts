@@ -10,6 +10,7 @@ import { SCREEN_RE, findContact, google, openApp, phoneCall, readScreen, webSear
 import { speak } from './tts';
 import type { ChatMsg } from './types';
 import { T } from './i18n';
+import { withOverlayHidden } from './capture';
 import { clipThat } from './clip';
 import { moodToy, parseToyTags, runToyCmds, toyPrompt, type ToyCmd } from './lovense';
 
@@ -294,7 +295,7 @@ Ignora barre di sistema e icone. Se lo schermo è vuoto o non c'è nulla di inte
 
 export async function describeScreen(): Promise<string | null> {
   const s = useApp.getState().settings.vision;
-  const b64 = await invoke<string>('capture_screen', { maxWidth: s.maxWidth, quality: 70 });
+  const b64 = await withOverlayHidden(() => invoke<string>('capture_screen', { maxWidth: s.maxWidth, quality: 70 }));
   const r = await complete(
     'vision',
     [
