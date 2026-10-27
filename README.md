@@ -345,3 +345,7 @@ The UI is available in Italian and English. Switch it in **Settings → Mode →
 ### License (English)
 
 Cyber AI's own code is Apache-2.0. Desktop pet mode is derived from lachydotmcg/capri-desktop (PolyForm Noncommercial 1.0.0, Required Notice: Copyright 2026 Lachy) and notme71/Capri-Desktop (MIT, Copyright (c) 2026 vincent), so builds that include it are for **non-commercial use only**. The Capri artwork (© CD PROJEKT RED / Studio Trigger) is not bundled; the app downloads it from the original repositories only on request.
+
+
+Support me pls
+https://ko-fi.com/devnodeita 
