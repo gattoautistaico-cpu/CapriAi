@@ -5,5 +5,26 @@ This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 The names "Cyber AI" and "Capri AI", and the related logos, are not licensed
 under Apache-2.0: section 6 of the license excludes trademarks.
 
+Desktop pet mode (src/lib/pet/, src/components/pet/, src-tauri/src/pet.rs)
+is derived from:
+
+  * lachydotmcg/capri-desktop — https://github.com/lachydotmcg/capri-desktop
+    Required Notice: Copyright 2026 Lachy (https://github.com/lachydotmcg)
+    Licensed under the PolyForm Noncommercial License 1.0.0
+    (LICENSES/PolyForm-Noncommercial-1.0.0.md,
+     https://polyformproject.org/licenses/noncommercial/1.0.0)
+
+  * notme71/Capri-Desktop — https://github.com/notme71/Capri-Desktop
+    Copyright (c) 2026 vincent
+    Licensed under the MIT License (LICENSES/MIT-notme71-Capri-Desktop.txt)
+
+Because of the PolyForm Noncommercial terms, builds that include pet mode may
+only be used, copied and modified for non-commercial purposes.
+
+Capri and Cyberpunk: Edgerunners are (c) CD PROJEKT RED / Studio Trigger.
+Their artwork is not included; the app downloads it from the original
+repositories only on request. Unofficial fan project.
+Inspired by jpartnma_'s TikTok video.
+
 Third-party components keep their own licenses (Tauri, React, Ollama,
-whisper.cpp, Piper, etc.).
+whisper.cpp, Piper, ffmpeg, etc.).

@@ -20,6 +20,7 @@ import { swiftPlay, swiftStatus } from '../lib/swiftfree';
 import { connectSpotify, disconnectSpotify, play as spotifyPlay, spotifyConnected } from '../lib/spotify';
 import { downloadPiperVoice, speak, webVoices } from '../lib/tts';
 import { ClipTab, LovenseTab } from './Extras';
+import { PetTab } from './pet/PetSettings';
 import { isVideo } from '../lib/useSprite';
 import { SPRITE_STATES, type Profile, type ProviderId, type Settings as S } from '../lib/types';
 import { Btn, Chip, Field, H, Select, Toggle } from './ui';
@@ -37,6 +38,7 @@ function switchLang(l: 'it' | 'en' | 'pl') {
 
 const TABS = [
   ['capri', 'Modalità'],
+  ['pet', 'Desktop pet'],
   ['avatar', 'Avatar'],
   ['persona', 'Personalità'],
   ['voce', 'Voce'],
@@ -138,11 +140,12 @@ function ModeTab() {
 
       <section className="flex flex-col gap-3">
         <H n="00">Interfaccia</H>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {(
             [
               ['capri', 'Capri', 'Sigillo dormiente + finestra glitch + terminale'],
               ['classic', 'Classica', 'Avatar libero sul desktop + fumetto'],
+              ['pet', 'Desktop pet', 'Capri autonoma: si siede sulle finestre, cade, dorme, sbircia'],
             ] as const
           ).map(([id, label, hint]) => (
             <button
@@ -1257,6 +1260,7 @@ export function SettingsPanel() {
   const setPanel = useApp((s) => s.setPanel);
   const body = {
     capri: <ModeTab />,
+    pet: <PetTab />,
     avatar: <AvatarTab />,
     persona: <PersonaTab />,
     voce: <VoiceTab />,

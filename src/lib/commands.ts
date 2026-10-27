@@ -9,6 +9,7 @@ import { T } from './i18n';
 import { musicControl, musicPlay } from './music';
 import { activeProfile, log, useApp } from './store';
 import { speak } from './tts';
+import { runErrand } from './pet/errands';
 
 /** Toglie "hey capri," / "capri" dall'inizio della frase. */
 function stripWake(text: string): string {
@@ -108,6 +109,13 @@ export async function fastCommand(raw: string): Promise<boolean> {
         say(T(k === 'pause' ? 'Pausa.' : k === 'resume' ? 'Si riparte.' : k === 'next' ? 'Prossima.' : 'Quella di prima.'), 'smug');
         return true;
       }
+    }
+    // ---- commissioni (timer, sveglie, studio, volume, finestre, cartelle, YouTube, memoria, sync, sfide)
+    const er = await runErrand(text);
+    if (er) {
+      st.setExchange({ user: text, np: '', sys: er.sys ?? '' });
+      if (er.say) say(er.say, er.mood ?? 'happy');
+      return true;
     }
     // ---- DJ mode: la frase è il brano
     if (mode === 'dj') {

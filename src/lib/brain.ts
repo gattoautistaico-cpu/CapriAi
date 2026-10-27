@@ -2,6 +2,7 @@
  * Orchestratore: conversazione, memoria, mood, visione dello schermo.
  */
 import { invoke } from '@tauri-apps/api/core';
+import { onUserChat, petPrompt } from './pet/life';
 import { buildSystemPrompt } from './personalities';
 import { complete } from './router';
 import { activeProfile, log, useApp } from './store';
@@ -59,7 +60,7 @@ function systemPrompt(): string {
     userName: st.settings.ui.userName,
     facts: st.facts.slice(-40).map((f) => f.text),
     screen: st.status.lastScreen || undefined,
-  }) + music + (toolsPrompt() ? `\n\n${toolsPrompt()}` : '') + (toyPrompt() ? `\n\n${toyPrompt()}` : '');
+  }) + music + (toolsPrompt() ? `\n\n${toolsPrompt()}` : '') + (toyPrompt() ? `\n\n${toyPrompt()}` : '') + (petPrompt() ? `\n\n${petPrompt()}` : '');
 }
 
 function remember(m: ChatMsg) {
@@ -225,6 +226,7 @@ export async function ask(userText: string, opts: { voice?: boolean; image?: str
   if (!text && !opts.image) return;
   const st = useApp.getState();
   st.pushChat({ role: 'user', text: text || '[immagine]', ts: Date.now(), meta: opts.voice ? 'voce' : undefined });
+  onUserChat();
   // comandi rapidi (clip, DJ/search mode, musica, apri app…): subito, senza AI e senza coda
   if (!opts.image && (await fastCommand(text))) return;
   st.setExchange({ user: text || '[immagine]', np: '', sys: '' });

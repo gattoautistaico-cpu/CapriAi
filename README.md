@@ -185,6 +185,71 @@ Build automatica: fai push su GitHub e il workflow `.github/workflows/build-wind
 - Hotkey push-to-talk predefinita: `Ctrl+Shift+W`, modificabile nella scheda Ascolto.
 - Dal tray, "Blocca/Sblocca interazione" rende tutta la finestra cliccabile. Serve se il click-through dà problemi.
 
+## Novità 0.7.0 — Desktop pet
+
+Nuova modalità **Desktop pet** (Impostazioni → Desktop pet, oppure Modalità → Desktop pet). Capri vive sul desktop da sola, come nei progetti [lachydotmcg/capri-desktop](https://github.com/lachydotmcg/capri-desktop) e [notme71/Capri-Desktop](https://github.com/notme71/Capri-Desktop), che qui sono stati riscritti in TypeScript/Rust, uniti e collegati al cervello di Cyber AI (AI locale/cloud, voce, Hey Capri, strumenti).
+
+**Movimento e fisica**
+- Si siede sui bordi delle finestre (solo sui tratti non coperti) e segue la finestra quando la sposti.
+- Se la finestra viene coperta, ridotta a icona o chiusa, si alza e cade sul bordo successivo o sopra la taskbar.
+- Trascinata resta appesa ("dangle"). Al rilascio cade sul bordo sotto di lei. **Shift** al rilascio = si siede lì, **Ctrl** = resta appesa.
+- **Lancio con inerzia**: lanciala e vola, rimbalza sui lati dello schermo e atterra sul primo bordo che attraversa.
+- **Doppio clic**: sale sul cursore e si inclina mentre lo muovi. Per farla scendere usa **Ctrl+Alt+C**.
+- Salta da sola ad arco da una finestra all'altra.
+- Sbircia dal bordo dello schermo più vicino quando non tocchi il PC per 90 s.
+- Si nasconde quando un'app è a schermo intero.
+- Taglie: 170, 240, 320, 440.
+
+**Vita autonoma**
+- Animazioni a strisce: respiro, inclinazione, blink e blink glitch inseriti nel ciclo, glitch ogni 30-60 s, bocca che si muove mentre parla.
+- Si stiracchia, si guarda intorno e sbadiglia. Dopo N secondi senza input sbadiglia e si addormenta (con le z), e si sveglia quando torni.
+- **Carezze**: muovi il mouse avanti e indietro sopra di lei. Fanno comparire i cuori e alzano il sync.
+- **Mischief**: ogni tanto "hackera" lo schermo con effetti leggeri e click-through (Ctrl+Alt+C li ferma). Ci sono 6 stili (barre, strappo, corruzione, hex rain, ENGRAM SYNC, cursore inseguitore) e se ne sblocca uno nuovo ogni 10% di sync. Il chip di Capri entra dall'alto a destra.
+- **Sync**: sale con il tempo passato insieme, i messaggi, le carezze e le sfide completate, con limiti giornalieri. Cambia il tono delle risposte (da diffidente a possessiva). Chiedi "com'è il nostro sync?".
+- **Osservazioni spontanee**:
+  - quando rientri dopo 20+ minuti;
+  - a notte fonda;
+  - con la batteria sotto il 20%;
+  - con la CPU al 90% per 30 s;
+  - dopo ore nella stessa app.
+  - Ogni tipo ha la sua pausa.
+- **Sfide** adatte all'app in primo piano (browser, chat, codice, musica, documenti), generate dall'AI con un filtro di sicurezza oppure prese da una lista. "Sfidami" ne chiede una, "fatto" la completa.
+- **Musica**: dondola a ritmo e commenta il brano quando Spotify o YouTube suonano.
+- **Battute registrate**: file `.wav` o `.mp3` per occasione (`pat.wav`, `wake.wav`, `alarm.wav`…), messi nella cartella aperta da Impostazioni → Desktop pet.
+
+**Interfaccia**
+- Fumetto "Neon": angoli tagliati, bordo verde con segni cremisi, ritratto che muove la bocca. Per gli hack c'è la variante terminale verde ("> testo_").
+- Card **cut-in** con gli occhi.
+- Menu Neon con il tasto destro: parla/scrivi, sfidami, siediti/alzati, cursore, sbircia, dormi, riportala qui, mischief, taglia, sync, impostazioni, esci.
+- Passando sopra di lei compaiono la matita (scrivi) e l'onda (parla).
+- Scorciatoie: **Ctrl+Alt+T** scrivi, **Ctrl+Alt+V** parla, **Ctrl+Alt+L** guarda lo schermo, **Ctrl+Alt+C** scendi / ferma i dispetti.
+- Avvio con Windows, opzionale.
+- Personalità **"Capri (costrutto)"**, adattata dalla persona di Capri-Desktop.
+
+**Commissioni senza AI** (in italiano, inglese e polacco, in tutte le modalità):
+- timer ("timer di 10 minuti");
+- promemoria ("ricordami di X tra 20 minuti", "… alle 18:30");
+- sveglie ("sveglia alle 7");
+- studio a pomodoro ("studiamo"), cancella sveglie;
+- apri Download, Documenti, Desktop, Immagini, Video, Esplora file, Blocco note, Calcolatrice, Paint, Gestione attività, Impostazioni, Strumento di cattura;
+- volume su/giù, muto;
+- chiudi, riduci o passa a un'app ("chiudi spotify", "chiudi la scheda youtube");
+- "metti X su YouTube" apre direttamente il primo video;
+- "ricorda che…", "dimentica…", "dimentica tutto" (i segreti come password, carte o token non li salva).
+
+**Sprite**: le animazioni sono fan art di *Cyberpunk: Edgerunners* e **non sono incluse**.
+- In Impostazioni → Desktop pet → Sprite puoi scaricarle dai repository originali (commit fissati, in `%APPDATA%`) oppure importarle da una cartella.
+- Senza sprite il pet usa le GIF del profilo attivo.
+
+**Migliorie rispetto agli originali**
+- Tutto vive dentro l'overlay Tauri, senza finestre extra.
+- Lancio con inerzia.
+- Quando la finestra sotto di lei sparisce cade sul bordo successivo, invece di restare sospesa.
+- La zona cliccabile segue il frame opaco.
+- Usa i modelli e le voci di Cyber AI.
+- È in tre lingue.
+- Le sveglie funzionano anche fuori dalla modalità pet.
+
 ## Novità 0.6.0
 
 - **Menu CAPRI** (tasto destro su Capri), con lo stesso stile del video:
@@ -263,5 +328,20 @@ The UI is available in Italian and English. Switch it in **Settings → Mode →
 
 ## Licenza
 
-Apache License 2.0: vedi [LICENSE](LICENSE) e [NOTICE](NOTICE). © 2026 gattoautistaico-cpu.
-I nomi "Cyber AI" e "Capri AI" non sono concessi in licenza (Apache-2.0, sezione 6).
+- Codice di Cyber AI / Capri AI: **Apache License 2.0**, vedi [LICENSE](LICENSE) e [NOTICE](NOTICE). © 2026 gattoautistaico-cpu. I nomi "Cyber AI" e "Capri AI" non sono concessi in licenza (Apache-2.0, sezione 6).
+- **Modalità desktop pet** (`src/lib/pet/`, `src/components/pet/`, `src-tauri/src/pet.rs`): opera derivata da
+  - [lachydotmcg/capri-desktop](https://github.com/lachydotmcg/capri-desktop) — *Required Notice: Copyright 2026 Lachy (https://github.com/lachydotmcg)* — **PolyForm Noncommercial 1.0.0** ([testo](LICENSES/PolyForm-Noncommercial-1.0.0.md));
+  - [notme71/Capri-Desktop](https://github.com/notme71/Capri-Desktop) — Copyright (c) 2026 vincent — **MIT** sulle parti aggiunte o riscritte da vincent ([testo](LICENSES/MIT-notme71-Capri-Desktop.txt)).
+- Per via della licenza PolyForm Noncommercial, **le build che includono la modalità pet si possono usare, copiare e modificare solo per scopi non commerciali**. Dettagli in [LICENSES/README.md](LICENSES/README.md).
+- Capri e *Cyberpunk: Edgerunners* © CD PROJEKT RED / Studio Trigger. Progetto di fan, non ufficiale. Gli sprite non sono inclusi: si scaricano su richiesta dagli autori originali.
+
+### Crediti
+
+- **lachydotmcg** — [capri-desktop](https://github.com/lachydotmcg/capri-desktop), il primo a portare Capri sul desktop.
+- **vincent (notme71)** — [Capri-Desktop](https://github.com/notme71/Capri-Desktop): comportamenti, mischief, sync, commissioni.
+- **jpartnma_** — il video TikTok che ha ispirato entrambi.
+- Font *Share Tech Mono* (SIL OFL 1.1) tramite Google Fonts.
+
+### License (English)
+
+Cyber AI's own code is Apache-2.0. Desktop pet mode is derived from lachydotmcg/capri-desktop (PolyForm Noncommercial 1.0.0, Required Notice: Copyright 2026 Lachy) and notme71/Capri-Desktop (MIT, Copyright (c) 2026 vincent), so builds that include it are for **non-commercial use only**. The Capri artwork (© CD PROJEKT RED / Studio Trigger) is not bundled; the app downloads it from the original repositories only on request.

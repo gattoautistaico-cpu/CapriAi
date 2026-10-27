@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
 import { AnimatePresence } from 'framer-motion';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Avatar } from './components/Avatar';
 import { CapriOverlay } from './components/Capri';
 import { ChatPanel } from './components/ChatPanel';
@@ -18,6 +18,9 @@ import { T } from './lib/i18n';
 import { isClipCommand } from './lib/clip';
 import { applyReplay, openClipsFolder } from './lib/replay';
 import { preloadApps } from './lib/actions';
+import { PetMode } from './components/pet/PetMode';
+import { usePet } from './lib/pet/bus';
+import { tickAlarms } from './lib/pet/life';
 
 /** In modalità passiva: dopo la parola di attivazione la frase successiva è il comando. */
 let awaitingCommandUntil = 0;
@@ -132,6 +135,8 @@ export default function App() {
   const visionOn = useApp((s) => s.settings.vision.enabled);
   const interval = useApp((s) => s.settings.vision.intervalSec);
   const baseUrl = useApp((s) => s.settings.local.baseUrl);
+  const uiMode = useApp((s) => s.settings.ui.mode);
+  const petKeys = useApp((s) => s.settings.pet.keys);
 
   const ptt = useCallback(async (down: boolean) => {
     // push-to-talk: è sempre un comando, anche in modalità passiva
@@ -180,12 +185,29 @@ export default function App() {
         });
         log('info', 'hotkey', `push-to-talk: ${hotkey}`);
         // scorciatoie del menu Capri: apri cartella clip, clip immediato
-        const extra: [string, () => void][] = [
+        const extra: [string, () => void][] = [];
+        // modalità pet: scendi / ferma mischief, scrivile, parlale, guarda lo schermo (hanno la precedenza)
+        if (uiMode === 'pet')
+          extra.push(
+            [petKeys.off, () => usePet.getState().act('hopoff')],
+            [petKeys.talk, () => usePet.getState().setTyper(!usePet.getState().typer)],
+            [petKeys.voice, () => void listenRef.current()],
+            [
+              petKeys.look,
+              () => {
+                usePet.getState().setCutin('eyes', 4);
+                void visionTick(true);
+              },
+            ],
+          );
+        extra.push(
           [keys.openClips, () => void openClipsFolder().catch((err) => log('error', 'replay', String(err)))],
           [keys.clip, () => void ask('clip that', { src: 'hotkey' })],
-        ];
+        );
+        const used = new Set<string>([hotkey.toLowerCase()]);
         for (const [k, fn] of extra) {
-          if (!k || k === hotkey) continue;
+          if (!k || used.has(k.toLowerCase())) continue;
+          used.add(k.toLowerCase());
           try {
             await register(k, (e) => e.state === 'Pressed' && fn());
           } catch (err) {
@@ -199,7 +221,13 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [hotkey, ptt, keys.openClips, keys.clip]);
+  }, [hotkey, ptt, keys.openClips, keys.clip, uiMode, petKeys.off, petKeys.talk, petKeys.voice, petKeys.look]);
+
+  // sveglie / timer / promemoria / studio (anche fuori dalla modalità pet)
+  useEffect(() => {
+    const t = window.setInterval(tickAlarms, 1000);
+    return () => window.clearInterval(t);
+  }, []);
 
   // instant replay di Capri (ffmpeg)
   useEffect(() => {
@@ -229,19 +257,21 @@ export default function App() {
     return () => window.clearInterval(t);
   }, [baseUrl]);
 
-  const mode = useApp((s) => s.settings.ui.mode);
+  const mode = uiMode;
   const listenOnce = async () => {
     awaitingCommandUntil = Date.now() + 30000;
     if (!(await openMic())) return;
     mic.listenOnce();
   };
+  const listenRef = useRef(listenOnce);
+  listenRef.current = listenOnce;
 
   const toggleContinuous = () => useApp.getState().setSettings((s) => ({ ...s, stt: { ...s.stt, continuous: !s.stt.continuous } }));
 
   return (
     <main className="relative h-screen w-screen" aria-label="Cyber AI overlay">
       {lock && <div className="pointer-events-none absolute inset-0 border-2 border-cyan/60" aria-hidden="true" />}
-      {mode === 'capri' ? <CapriOverlay onListen={() => void listenOnce()} /> : <Avatar onMic={toggleContinuous} />}
+      {mode === 'pet' ? <PetMode onListen={() => void listenOnce()} /> : mode === 'capri' ? <CapriOverlay onListen={() => void listenOnce()} /> : <Avatar onMic={toggleContinuous} />}
       <AnimatePresence>
         {panel === 'chat' && <ChatPanel key="chat" onPtt={(d) => void ptt(d)} />}
         {panel === 'settings' && <SettingsPanel key="settings" />}

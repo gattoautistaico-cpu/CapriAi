@@ -15,6 +15,8 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewWindow};
 
+mod pet;
+
 /// Rettangolo cliccabile in coordinate CSS (logiche) della finestra.
 #[derive(Deserialize, Clone, Debug)]
 struct Rect {
@@ -642,6 +644,9 @@ fn media_key(key: String) -> Result<(), String> {
         "prev" => 0xB1,
         "stop" => 0xB2,
         "play_pause" => 0xB3,
+        "mute" => 0xAD,
+        "vol_down" => 0xAE,
+        "vol_up" => 0xAF,
         _ => return Err("tasto sconosciuto".into()),
     };
     #[cfg(windows)]
@@ -699,6 +704,120 @@ async fn oauth_listen(port: u16, timeout_sec: u64) -> Result<String, String> {
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------- desktop pet
+
+#[tauri::command]
+fn pet_windows(window: tauri::Window) -> Vec<pet::PetWin> {
+    pet::windows(pet::frame_of(&window))
+}
+
+#[tauri::command]
+fn pet_desk(window: tauri::Window) -> pet::DeskInfo {
+    pet::desk(pet::frame_of(&window))
+}
+
+#[tauri::command]
+fn pet_signals() -> pet::Signals {
+    pet::signals()
+}
+
+#[tauri::command]
+async fn pet_window_action(hwnd: i64, action: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || pet::window_action(hwnd, &action))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Avvio con Windows (HKCU\...\Run). `on` = None legge soltanto lo stato.
+#[tauri::command]
+async fn autostart(on: Option<bool>) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        const KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+        let run = |args: &[&str]| -> bool {
+            let mut cmd = Command::new("reg");
+            cmd.args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+            hide_window(&mut cmd);
+            cmd.status().map(|s| s.success()).unwrap_or(false)
+        };
+        match on {
+            Some(true) => {
+                let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+                let val = format!("\"{}\"", exe.display());
+                if !run(&["add", KEY, "/v", "CyberAI", "/t", "REG_SZ", "/d", &val, "/f"]) {
+                    return Err("registro non scrivibile".into());
+                }
+                Ok(true)
+            }
+            Some(false) => {
+                run(&["delete", KEY, "/v", "CyberAI", "/f"]);
+                Ok(false)
+            }
+            None => Ok(run(&["query", KEY, "/v", "CyberAI"])),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Primo video dei risultati di YouTube (id), come le "errands" di notme71/Capri-Desktop.
+#[tauri::command]
+async fn yt_first(query: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let q: String = query
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c.to_string() } else if c == ' ' { "+".into() } else { format!("%{:02X}", c as u32 & 0xFF) })
+            .collect();
+        let url = format!("https://www.youtube.com/results?search_query={q}&hl=en");
+        let script = format!(
+            "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[Text.Encoding]::UTF8; (Invoke-WebRequest -UseBasicParsing -Uri '{}' -Headers @{{Cookie='SOCS=CAI'; 'Accept-Language'='en-US,en;q=0.9'}} -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36' -TimeoutSec 12).Content",
+            url.replace('\'', "''")
+        );
+        let mut cmd = Command::new("powershell.exe");
+        cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        hide_window(&mut cmd);
+        let out = cmd.output().map_err(|e| e.to_string())?;
+        let html = String::from_utf8_lossy(&out.stdout);
+        let key = "\"videoRenderer\":{\"videoId\":\"";
+        Ok(html.find(key).and_then(|i| {
+            let id: String = html[i + key.len()..].chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+            if id.len() == 11 { Some(id) } else { None }
+        }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Legge un file dei dati dell'app come byte (sprite del pet: canvas senza "taint").
+#[tauri::command]
+fn read_bytes(app: AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
+    let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let p = std::fs::canonicalize(&path).map_err(|e| e.to_string())?;
+    let b = std::fs::canonicalize(&base).unwrap_or(base);
+    if !p.starts_with(&b) {
+        return Err("percorso non consentito".into());
+    }
+    let data = std::fs::read(&p).map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(data))
+}
+
+/// Nomi dei file in una cartella (non ricorsivo).
+#[tauri::command]
+fn list_dir(path: String) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(&path)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v
 }
 
 // ---------------------------------------------------------------- avvio
@@ -839,6 +958,8 @@ async fn download_file(url: String, dest: String) -> Result<(), String> {
     if !url.starts_with("https://huggingface.co/rhasspy/piper-voices/")
         && !url.starts_with("https://github.com/BtbN/FFmpeg-Builds/releases/")
         && !url.starts_with("https://huggingface.co/ggerganov/whisper.cpp/")
+        && !url.starts_with("https://raw.githubusercontent.com/lachydotmcg/capri-desktop/")
+        && !url.starts_with("https://raw.githubusercontent.com/notme71/Capri-Desktop/")
     {
         return Err("URL non consentito".into());
     }
@@ -1279,6 +1400,14 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            pet_windows,
+            yt_first,
+            pet_desk,
+            pet_signals,
+            pet_window_action,
+            autostart,
+            read_bytes,
+            list_dir,
             set_tray_lang,
             open_path,
             ensure_dir,

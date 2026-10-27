@@ -19,7 +19,7 @@ const CYAN = '#00f0ff';
 const YELLOW = '#fcee0a';
 const MONO = "'Share Tech Mono', 'Cascadia Mono', Consolas, monospace";
 const UI = "'Rajdhani', 'Bahnschrift SemiCondensed', 'Bahnschrift', sans-serif";
-const VERSION = 'v0.6.0';
+const VERSION = 'v0.7.0';
 
 /** "CommandOrControl+Alt+C" → "CTRL+ALT+C" */
 const keyLabel = (k: string) => k.replace(/CommandOrControl|CmdOrCtrl|Control/gi, 'CTRL').toUpperCase();
@@ -166,6 +166,16 @@ export function CapriMenu({ x, y, onClose, onClingy }: { x: number; y: number; o
       value: s.capri.dragMode === 'lightning' ? 'LIGHTNING' : 'NORMAL',
       on: s.capri.dragMode === 'lightning',
       run: () => setSettings((x2) => ({ ...x2, capri: { ...x2.capri, dragMode: x2.capri.dragMode === 'lightning' ? 'normal' : 'lightning' } })),
+    },
+    {
+      kind: 'item',
+      id: 'pet',
+      label: 'DESKTOP PET',
+      value: 'OFF',
+      run: () => {
+        setSettings((x2) => ({ ...x2, ui: { ...x2.ui, mode: 'pet' } }));
+        onClose();
+      },
     },
     {
       kind: 'item',

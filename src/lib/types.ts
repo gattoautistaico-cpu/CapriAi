@@ -128,7 +128,7 @@ export interface Settings {
   };
   hotkey: string;
   activeProfileId: string;
-  ui: { showHud: boolean; balloonSec: number; userName: string; mode: 'classic' | 'capri'; streamVisible: boolean; lang: '' | 'it' | 'en' | 'pl' };
+  ui: { showHud: boolean; balloonSec: number; userName: string; mode: 'classic' | 'capri' | 'pet'; streamVisible: boolean; lang: '' | 'it' | 'en' | 'pl' };
   capri: { frameWidth: number; sleepSec: number; typeCps: number; glitch: boolean; dragMode: 'normal' | 'lightning'; clingy: boolean };
   music: {
     provider: 'auto' | 'swiftfree' | 'spotify';
@@ -151,6 +151,7 @@ export interface Settings {
   replay: ReplaySettings;
   keys: { openClips: string; clip: string };
   lovense: LovenseSettings;
+  pet: PetSettings;
   firstRun: boolean;
 }
 
@@ -251,4 +252,51 @@ export interface LogEntry {
   level: 'info' | 'warn' | 'error' | 'ok';
   src: string;
   msg: string;
+}
+
+/** Sveglia / timer / promemoria del pet. */
+export interface PetAlarm {
+  id: string;
+  /** epoch ms */
+  at: number;
+  label: string;
+  kind: 'timer' | 'alarm' | 'reminder' | 'study';
+}
+
+/** Modalità desktop pet autonoma (porting di lachydotmcg/capri-desktop + notme71/Capri-Desktop). */
+export interface PetSettings {
+  /** 170 piccola, 240 media, 320 grande, 440 enorme */
+  size: number;
+  /** quali sprite usare: auto = strisce animate se scaricate, poi pose, poi GIF del profilo */
+  pack: 'auto' | 'strips' | 'poses' | 'profile';
+  files: { strips?: Record<string, string>; poses?: Record<string, string> };
+  x: number;
+  y: number;
+  placed: boolean;
+  /** animazioni (respiro, inclinazione, glitch); off = movimento ridotto */
+  motion: boolean;
+  /** salta da una finestra all'altra da sola */
+  wander: boolean;
+  sits: boolean;
+  peeks: boolean;
+  idleActs: boolean;
+  sleeps: boolean;
+  sleepAfterSec: number;
+  mischief: boolean;
+  mischiefMinSec: number;
+  mischiefMaxSec: number;
+  notices: boolean;
+  dares: boolean;
+  /** dondola a tempo quando Spotify/YouTube suonano */
+  musicBob: boolean;
+  musicComments: boolean;
+  hideFullscreen: boolean;
+  /** doppio clic: sale sul cursore */
+  rideCursor: boolean;
+  /** cartella di file .wav per occasione (pat.wav, click.wav, wake.wav, ...) */
+  voiceLines: string;
+  bubbleSec: number;
+  keys: { off: string; talk: string; voice: string; look: string };
+  sync: { points: number; day: string; today: Record<string, number>; level: number };
+  alarms: PetAlarm[];
 }
